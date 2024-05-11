@@ -11,6 +11,8 @@
 
       # Fix vscode server
       (fetchTarball "https://github.com/nix-community/nixos-vscode-server/tarball/master")
+      
+      #(fetchTarball "https://github.com/nix-community/impermanence/tarball/master")
     ];
 
   # Use the systemd-boot EFI boot loader.
@@ -21,6 +23,8 @@
   powerManagement.powertop.enable = true;
 
   networking.hostName = "sinix"; # Define your hostname.
+  networking.hostId = "224424a8"; # Generated with `head -c4 /dev/urandom | od -A none -t x4`
+
   # Pick only one of the below networking options.
   # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
   # networking.networkmanager.enable = true;  # Easiest to use and most distros use this by default.
@@ -50,9 +54,16 @@
   programs.zsh.enable = true;
   users.defaultUserShell = pkgs.zsh;  
 
+  # Setup Users
+  users.users.root = {
+    openssh.authorizedKeys.keys = [
+      "ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAQEAzNTYXbLXqEA8N3AKJO3WkEP7jRt2NTyV62zquwmztWX1yHxfc/KQODIjv7jM4ckOfFN1DccHk8Euv5kx3xB7Ay4B5+CPSm/c7m4Y2GH4aUEvvaUnUr/L9ocWF7Cek0NNCfLxKL5osprHIjFp9ZxuYhZ98RMI4kn1ybe9ukRwSH/xQvm/u8yWsf4j7clvTI7rwy80EHG8+WjYy4eXHuCvcW8AOONAZW20N7g3f0NS+RHMoC1N83mzuJLMt3kCt5BrSjJzapqi0FnJZtq1thY41hybkDx8NgqdeSvw8vOkEyxZsw8TTtJuTR9OutuiuRtgNJo3d6YkpiNYKPJZ0yey7w=="
+    ];
+  };
+
   users.users.simon = {
     isNormalUser = true;
-    extraGroups = [ "wheel" ]; # Enable ‘sudo’ for the user.
+    extraGroups = [ "wheel" "users" ];
     packages = with pkgs; [
       tree
     ];
@@ -64,72 +75,124 @@
   # List packages installed in system profile. To search, run:
   # $ nix search wget
   environment.systemPackages = with pkgs; [
-    wget
-    git
-    htop
-    iftop
     ncdu
     pciutils
     rclone
-    screen
-    wget
-    btrfs-progs
-    mergerfs
+    docker-compose
+    e2fsprogs # badblocks
     gptfdisk
+    htop
+    hddtemp
+    intel-gpu-tools
+    iotop
+    lm_sensors
+    mergerfs
+    mc
+    ncdu
+    nmap
+    nvme-cli
+    sanoid
+    snapraid
+    smartmontools
+    tdns-cli
+    tmux
+    tree
+    vim
+    wget
+    parted
   ];
 
-  # BTRFS raid1 filesystem
-  fileSystems."/mnt/raid" = 
-  {
-    device = "/dev/disk/by-uuid/94164f56-a397-4bf5-bf5a-9d2a24a4a69c";
-    fsType = "btrfs";
+  # 
+  # File Systems
+  #
+
+  # Boot + Root + Swap File Systems
+  fileSystems."/" =
+    { device = "/dev/disk/by-uuid/c36952a3-c415-4ca0-89c6-aa290630c23f";
+      fsType = "ext4";
+    };
+
+  fileSystems."/boot" =
+    { device = "/dev/disk/by-uuid/A9A2-6DD1";
+      fsType = "vfat";
+      options = [ "fmask=0077" "dmask=0077" ];
+    };
+
+  boot.kernel.sysctl = { "vm.swappiness" = 10;}; # Prefer not to use swap - it's here for safety but it's on usb flash so don't want it used unless necessary.
+  swapDevices = [ {
+    device = "/dev/disk/by-partlabel/swap";
+    }];
+
+  # Data Storage File Systems
+  
+  # enable ZFS
+  boot.supportedFilesystems = [ "zfs" ];
+  boot.zfs.forceImportRoot = false;
+  
+  boot.zfs.extraPools = [ "tank" ];
+
+  # File systems are automatically mounted by zfs pool - here for reference.
+  # compression = ld4
+  /*fileSystems."/mnt/tank" = {
+    device = "tank";
+    fsType = "zfs";
   };
 
-  fileSystems."/appdata" = 
-  {
-    depends = [
-      "/mnt/raid" 
-    ];
-    device = "/dev/disk/by-uuid/94164f56-a397-4bf5-bf5a-9d2a24a4a69c";
-    fsType = "btrfs";
-    options = [
-      "subvol=appdata"
-      "compress=zstd"
-    ];
-  };
+  # appdata file system for docker data etc
+  # atime = off
+  fileSystems."/mnt/tank/appdata" = {
+    device = "tank/appdata";
+    fsType = "zfs";
+  };*/
+  
+  # file system to be merged into mergerfs
+  # atime = on
+  #fileSystems."/mnt/tank/fuse" = {
+  #  device = "tank/fuse";
+  #  fsType = "zfs";
+  #};*/
+  
+  services.zfs.autoScrub.enable = true;
 
   # JBODs - the spinning disks
+
+  # Setup disks to spin down after inactivity.
+  #powerManagement.powerUpCommands = ''
+  #   ${pkgs.hdparm}/sbin/sdparm -l --set SCT=6000 --set STANDBY=1 /dev/disk/by-label/jbod*
+  #''; #${pkgs.hdparm}/sbin/hdparm -S 1 
+
   fileSystems."/mnt/jbod/jbod1" = 
   {
     device = "/dev/disk/by-label/jbod1";
     fsType = "ext4";
   };
 
+  # Merge JBODs and tank/fuse into one file system
+  # Prefer writing to fuse (nvme)
   fileSystems."/storage" = {
+    depends = [
+      "/mnt/tank/fuse"
+      "/mnt/jbod/jbod1"
+    ];
+    fsType = "fuse.mergerfs";
+    device = "/mnt/tank/fuse:/mnt/jbod/*"; # fuse first, see below
+    options = [
+      "defaults" "nonempty" "allow_other" "use_ino" "cache.files=off" "moveonenospc=true" "dropcacheonclose=true" "minfreespace=200G" 
+      "category.create=ff" # ff = first found, so files are created on nvme storage first if there is space
+    ];
+  };
+
+  # Secondary filesystem that is just the jbods - script (WIP) move files from fuse -> jbod_storage if they are not accessed in over ~24hrs
+  fileSystems."/jbod_storage" = {
+    depends = [
+      "/mnt/jbod/jbod1"
+    ];
     fsType = "fuse.mergerfs";
     device = "/mnt/jbod/*";
     options = [
       "defaults" "nonempty" "allow_other" "use_ino" "cache.files=off" "moveonenospc=true" "dropcacheonclose=true" "minfreespace=200G" "category.create=mfs"
     ];
   };
-
- # TODO put a swap somewhere else, btrfs doesn't support swap on multidevice filesystems
-/*
-  fileSystems."/swap" = 
-  {
-    depends = [
-      "/mnt/raid" 
-    ];
-    device = "/dev/disk/by-uuid/94164f56-a397-4bf5-bf5a-9d2a24a4a69c";
-    fsType = "btrfs";
-    options = [
-      "subvol=swap"
-      "noatime"
-    ];
-  };
-
-  swapDevices = [ { device = "/swap/swapfile"; } ];
-  */
 
   # Some programs need SUID wrappers, can be configured further or are
   # started in user sessions.
@@ -144,25 +207,67 @@
   # Enable the OpenSSH daemon.
   services.openssh = {
     enable = true;
+    openFirewall = true;
     settings = {
-      PermitRootLogin = "no";
       PasswordAuthentication = false;
+      PermitRootLogin = "prohibit-password";
+    };
+  };
+
+  services.samba-wsdd.enable = true; # make shares visible for windows 10 clients
+  services.samba = {
+    enable = true;
+    openFirewall = true;
+    securityType = "user";
+    extraConfig = ''
+      workgroup = WORKGROUP
+      server string = sinix
+      netbios name = sinix
+      security = user
+      guest ok = yes
+      guest account = nobody
+      map to guest = bad user
+      load printers = no
+      hosts allow = 192.168.1. 127.0.0.1 localhost
+      hosts deny = 0.0.0.0/0
+    '';
+    shares = {
+      Public = {
+        path = "/storage/Public";
+        browseable = "yes";
+        "read only" = "no";
+        "guest ok" = "yes";
+        "create mask" = "0666"; # Anyone can read/write, no execute
+        "directory mask" = "0777"; # Anyone can read/write/execute
+      };
+      Personal = {
+        path = "/storage/Personal";
+        browseable = "yes";
+        "read only" = "no";
+        "guest ok" = "no";
+        "create mask" = "0770"; # Only user/group can read/write/execute
+        "directory mask" = "0770"; # Only user/group can read/write/execute
+        "valid users" = "simon";
+      };
+      appdata = {
+        path = "/mnt/tank/appdata";
+        browseable = "no";
+        "read only" = "no";
+        "guest ok" = "no";
+        "create mask" = "0644"; # TODO
+        "directory mask" = "0755";
+        "admin users" = "simon";
+      };
     };
   };
   
-  # Weekly btrfs scrub - checks that all data is good.
-  services.btrfs.autoScrub = {
-    enable = true;
-    interval = "weekly";
-  };
-
   services.vscode-server.enable = true;
 
   # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ ... ];
   # networking.firewall.allowedUDPPorts = [ ... ];
   # Or disable the firewall altogether.
-  networking.firewall.enable = false; # TODO
+  networking.firewall.enable = false;
 
   # Copy the NixOS configuration file and link it from the resulting system
   # (/run/current-system/configuration.nix). This is useful in case you
