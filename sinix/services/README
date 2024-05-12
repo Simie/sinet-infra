@@ -1,0 +1,3 @@
+To start infra stack:
+
+sudo docker-compose --project-directory ./infra --env-file ~/secrets.env --env-file shared.env --env-file infra/settings.env up

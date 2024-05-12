@@ -261,13 +261,21 @@
     };
   };
   
+  # Setup docker
+  virtualisation.docker.enable = true;
+  # TODO: docker-compose up on boot?
+
+  # Dev - enable vscode server
   services.vscode-server.enable = true;
 
   # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ ... ];
   # networking.firewall.allowedUDPPorts = [ ... ];
   # Or disable the firewall altogether.
-  networking.firewall.enable = false;
+  networking.firewall = {
+    enable = true;
+    allowedUDPPorts = [ 80 443 ];
+  };
 
   # Copy the NixOS configuration file and link it from the resulting system
   # (/run/current-system/configuration.nix). This is useful in case you
