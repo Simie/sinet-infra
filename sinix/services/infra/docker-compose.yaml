@@ -3,8 +3,16 @@ version: "3.3"
 networks:
   default:
     driver: bridge
-  traefik: # Network used to allow traefiq to talk to other containers
-  internal: # Internal network for these services
+  traefik: # Network used to allow traefiq to talk to other containers. Any container that traefik is proxying needs to be on this network or on host network.
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: veth_traefik # give it a specific name so we can add to trusted interfaces in the firewall (configuration.nix)
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.100.0.0/16
+  internal:
+    name: z_internal # Z_ prefix makes it alphabetically after traefik, so traefik is used as the default route when accessing the host. (ugh)
 
 services:
 
@@ -15,11 +23,19 @@ services:
   traefik:
     image: "traefik:v3.0"
     container_name: "traefik"
+    hostname: "traefik"
     networks:
-      - traefik
-      - internal
+      #default:
+      internal:
+      traefik:
+        ipv4_address: 172.100.1.2 # Fixed IP so it can be allowed by services with trusted reverse proxy lists
+      #macvlan-lan:
+      #  ipv4_address: 192.168.2.2
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # Communicate with host (For HASS)
     env_file: 
       - settings.env
+    restart: unless-stopped
     command:
       #- "--log.level=DEBUG"
       - "--api.insecure=true"
@@ -27,11 +43,23 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entryPoints.web.address=:80"
       - "--entryPoints.websecure.address=:443"
+      - "--providers.docker.network=infra_traefik" # Otherwise it sometimes tries to use internal network to talk to host, which breaks firewall allowing access to host from this containers fixed ip
 
       - "--certificatesresolvers.sinetresolver.acme.dnschallenge=true"
       - "--certificatesresolvers.sinetresolver.acme.dnschallenge.provider=cloudflare"
       - "--certificatesresolvers.sinetresolver.acme.email=me@simonmoles.com"
       - "--certificatesresolvers.sinetresolver.acme.storage=/letsencrypt/acme.json"
+    labels:
+      - "traefik.enable=true"
+
+      # Default redirect any http request -> https
+      - "traefik.http.middlewares.https_redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.https_redirect.redirectscheme.permanent=true"
+
+      - "traefik.http.routers.default_http.rule=HostRegexp(`^.+\\.sinet\\.uk$`)"
+      - "traefik.http.routers.default_http.entrypoints=web"
+      - "traefik.http.routers.default_http.middlewares=https_redirect"
+      - "traefik.http.routers.default_http.priority=1" # Set priority as low as possible so doesn't take precedence over individual container-defined http routes
     ports:
       - "80:80"
       - "443:443"
@@ -110,11 +138,6 @@ services:
       - redis
     labels:
       - "traefik.enable=true"
-      ## HTTP Routers (redirect to HTTPS)
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      - "traefik.http.routers.authentik-rtr-web.rule=Host(`$AUTHENTIK_HOST`)"
-      - "traefik.http.routers.authentik-rtr-web.entrypoints=web"
-      - "traefik.http.routers.authentik-rtr-web.middlewares=redirect-to-https"
       ## HTTPS Routers
       - "traefik.http.routers.authentik-rtr.rule=Host(`$AUTHENTIK_HOST`)"
       - "traefik.http.routers.authentik-rtr.tls=true"
@@ -171,6 +194,7 @@ services:
   whoami-insecure:
     image: "traefik/whoami"
     container_name: "whoami-insecure"
+    restart: unless-stopped
     networks:
       - traefik
     env_file: 
@@ -197,11 +221,6 @@ services:
       - traefik
     labels:
       - "traefik.enable=true"
-      ## HTTP Routers (redirect to HTTPS)
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      - "traefik.http.routers.whoami-secure-web.rule=Host(`whoami-secure.$SI_DOMAIN`)"
-      - "traefik.http.routers.whoami-secure-web.entrypoints=web"
-      - "traefik.http.routers.whoami-secure-web.middlewares=redirect-to-https"
       ## HTTPS Routers
       - "traefik.http.routers.whoami-secure-websecure.rule=Host(`whoami-secure.$SI_DOMAIN`)"
       - "traefik.http.routers.whoami-secure-websecure.entrypoints=websecure"

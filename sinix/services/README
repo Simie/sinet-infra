@@ -1,3 +1,7 @@
 To start infra stack:
 
-sudo docker-compose --project-directory ./infra --env-file ~/secrets.env --env-file shared.env --env-file infra/settings.env up
+sudo docker-compose --project-directory ./infra --env-file ~/secrets.env --env-file shared.env --env-file infra/settings.env up -d
+
+To start homeassist stack:
+
+sudo docker-compose --project-directory ./homeassist --env-file ~/secrets.env --env-file shared.env --env-file homeassist/settings.env up -d

@@ -24,6 +24,7 @@
 
   networking.hostName = "sinix"; # Define your hostname.
   networking.hostId = "224424a8"; # Generated with `head -c4 /dev/urandom | od -A none -t x4`
+  networking.enableIPv6 = false; # too much faff, firewall logs always used ipv6 which makes it harder to work with
 
   # Pick only one of the below networking options.
   # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
@@ -72,6 +73,19 @@
     ];
   };
 
+  
+  # Users for Mosquitto (hass stack)
+  users.users.mosquitto = {
+    uid = 1883;
+    isSystemUser = true;
+    extraGroups = [ "mosquitto" ];
+    group = "mosquitto";
+  };
+
+  users.groups.mosquitto = {
+    gid = 1883;
+  };
+
   # List packages installed in system profile. To search, run:
   # $ nix search wget
   environment.systemPackages = with pkgs; [
@@ -91,7 +105,9 @@
     ncdu
     nmap
     nvme-cli
+    parted
     sanoid
+    screen
     snapraid
     smartmontools
     tdns-cli
@@ -99,7 +115,6 @@
     tree
     vim
     wget
-    parted
   ];
 
   # 
@@ -269,12 +284,19 @@
   services.vscode-server.enable = true;
 
   # Open ports in the firewall.
-  # networking.firewall.allowedTCPPorts = [ ... ];
-  # networking.firewall.allowedUDPPorts = [ ... ];
-  # Or disable the firewall altogether.
   networking.firewall = {
     enable = true;
-    allowedUDPPorts = [ 80 443 ];
+    allowedTCPPorts = [ 
+      80 443 # HTTP(S)
+      #40000 # Discovery
+      1400 # SONOS -> HASS
+      1883 # MQTT
+    ];
+    allowedUDPPorts = [
+      #1900 1901 137 136 138 # HASS
+    ];
+    trustedInterfaces = [ "veth_traefik" ];
+    logRefusedConnections = true;
   };
 
   # Copy the NixOS configuration file and link it from the resulting system

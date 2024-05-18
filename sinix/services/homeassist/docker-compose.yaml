@@ -1,0 +1,103 @@
+version: "3.3"
+
+networks:
+  default:
+    driver: bridge
+  traefik:
+    name: infra_traefik
+    external: true
+
+services:
+  homeassistant:
+    container_name: homeassistant
+    hostname: "hass"
+    image: "ghcr.io/home-assistant/home-assistant:stable"
+    volumes:
+      - /${SI_DOCKERDIR}/homeassist/homeassistant:/config
+      - /etc/localtime:/etc/localtime:ro
+      - /run/dbus:/run/dbus:ro
+    depends_on:
+      - mosquitto
+    devices:
+      - /dev/ttyACM0:/dev/ttyACM0 # Zigbee usb
+    restart: unless-stopped
+    network_mode: host
+    env_file: 
+      - settings.env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.homeassistant-websecure.entrypoints=websecure"
+      - "traefik.http.routers.homeassistant-websecure.rule=Host(`homeassistant.${SI_DOMAIN}`)"
+      - "traefik.http.routers.homeassistant-websecure.tls=true"
+      - "traefik.http.routers.homeassistant-websecure.tls.certresolver=sinetresolver"
+      - "traefik.http.services.homeassistant-websecure.loadbalancer.server.port=8123"
+      - "traefik.http.services.homeassistant-websecure.loadbalancer.sticky.cookie=true"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8123"]
+      start_period: 20s
+      interval: 30s
+      retries: 5
+      timeout: 3s
+
+  nodered:
+    container_name: nodered
+    image: nodered/node-red
+    networks: 
+      - traefik
+    #ports:
+    #  - 1880:1880
+    volumes:
+      - /${SI_DOCKERDIR}/homeassist/node-red:/data
+    depends_on:
+      - homeassistant
+      - mosquitto
+    env_file: 
+      - settings.env
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.nodered-websecure.entrypoints=websecure"
+      - "traefik.http.routers.nodered-websecure.rule=Host(`nodered.${SI_DOMAIN}`)"
+      - "traefik.http.routers.nodered-websecure.tls=true"
+      - "traefik.http.routers.nodered-websecure.tls.certresolver=sinetresolver"
+      - "traefik.http.services.nodered-websecure.loadbalancer.server.port=1880"
+      ## Middlewares
+      - "traefik.http.routers.nodered-websecure.middlewares=authentik"
+
+  mosquitto:
+    image: eclipse-mosquitto
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883/tcp"
+    volumes:
+      - /${SI_DOCKERDIR}/homeassist/mosquitto/config:/mosquitto/config
+      - /${SI_DOCKERDIR}/homeassist/mosquitto/data:/mosquitto/data
+      - /${SI_DOCKERDIR}/homeassist/mosquitto/log:/mosquitto/log
+    env_file: 
+      - settings.env
+    user: "1883:1883" # mosquitto/mosquitto
+    # Allow accessing terminal later
+    stdin_open: true
+    tty: true
+
+  hass-configurator:
+    container_name: hass-configurator
+    image: "causticlab/hass-configurator-docker:latest"
+    restart: always
+    networks:
+      - traefik
+    env_file: 
+      - settings.env
+    volumes:
+      - "/${SI_DOCKERDIR}/homeassist/configurator-config:/config"
+      - "/${SI_DOCKERDIR}/homeassist/homeassistant:/hass-config"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hass-config-websecure.entrypoints=websecure"
+      - "traefik.http.routers.hass-config-websecure.rule=Host(`homeassistant-config.${SI_DOMAIN}`)"
+      - "traefik.http.routers.hass-config-websecure.tls=true"
+      - "traefik.http.routers.hass-config-websecure.tls.certresolver=sinetresolver"
+      - "traefik.http.services.hass-config-websecure.loadbalancer.server.port=3218"
+      ## Middlewares
+      - "traefik.http.routers.hass-config-websecure.middlewares=authentik"
