@@ -1,0 +1,12 @@
+#!/bin/sh
+
+servicesdir=$(dirname "$0")
+targetdir="$servicesdir/$1"
+
+if [[ -f $targetdir/settings.env ]]; then
+   settings_arg="--env-file $targetdir/settings.env"
+else
+   settings_arg=
+fi
+
+docker-compose --project-directory $targetdir --env-file $servicesdir/../secrets.env --env-file ./shared.env $settings_arg "${@:2}"

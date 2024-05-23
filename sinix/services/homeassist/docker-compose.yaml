@@ -6,6 +6,9 @@ networks:
   traefik:
     name: infra_traefik
     external: true
+  #macvlan-lan:
+  #  name: infra_macvlan-lan
+  #  external: true
 
 services:
   homeassistant:
@@ -20,7 +23,7 @@ services:
       - mosquitto
     devices:
       - /dev/ttyACM0:/dev/ttyACM0 # Zigbee usb
-    restart: unless-stopped
+    restart: on-failure
     network_mode: host
     env_file: 
       - settings.env
@@ -32,6 +35,9 @@ services:
       - "traefik.http.routers.homeassistant-websecure.tls.certresolver=sinetresolver"
       - "traefik.http.services.homeassistant-websecure.loadbalancer.server.port=8123"
       - "traefik.http.services.homeassistant-websecure.loadbalancer.sticky.cookie=true"
+
+      - "logging=promtail"
+      - "logging_jobname=homeassistant"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8123"]
       start_period: 20s
@@ -53,7 +59,7 @@ services:
       - mosquitto
     env_file: 
       - settings.env
-    restart: unless-stopped
+    restart: on-failure
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.nodered-websecure.entrypoints=websecure"
@@ -64,10 +70,13 @@ services:
       ## Middlewares
       - "traefik.http.routers.nodered-websecure.middlewares=authentik"
 
+      - "logging=promtail"
+      - "logging_jobname=nodered"
+
   mosquitto:
     image: eclipse-mosquitto
     container_name: mosquitto
-    restart: unless-stopped
+    restart: on-failure
     ports:
       - "1883:1883/tcp"
     volumes:
@@ -84,9 +93,11 @@ services:
   hass-configurator:
     container_name: hass-configurator
     image: "causticlab/hass-configurator-docker:latest"
-    restart: always
+    restart: on-failure
     networks:
       - traefik
+    #ports:
+    #  - "3218:3218/tcp"
     env_file: 
       - settings.env
     volumes:

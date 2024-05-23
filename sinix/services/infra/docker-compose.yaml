@@ -35,7 +35,7 @@ services:
       - "host.docker.internal:host-gateway" # Communicate with host (For HASS)
     env_file: 
       - settings.env
-    restart: unless-stopped
+    restart: on-failure
     command:
       #- "--log.level=DEBUG"
       - "--api.insecure=true"
@@ -60,6 +60,8 @@ services:
       - "traefik.http.routers.default_http.entrypoints=web"
       - "traefik.http.routers.default_http.middlewares=https_redirect"
       - "traefik.http.routers.default_http.priority=1" # Set priority as low as possible so doesn't take precedence over individual container-defined http routes
+      - "logging=promtail"
+      - "logging_jobname=traefik"
     ports:
       - "80:80"
       - "443:443"
@@ -74,7 +76,7 @@ services:
 
   postgresql:
     image: docker.io/library/postgres:12-alpine
-    restart: unless-stopped
+    restart: on-failure
     env_file: 
       - settings.env
     networks:
@@ -95,7 +97,7 @@ services:
   redis:
     image: docker.io/library/redis:alpine
     command: --save 60 1 --loglevel warning
-    restart: unless-stopped
+    restart: on-failure
     networks:
       - internal
     healthcheck:
@@ -113,7 +115,7 @@ services:
 
   authentik_server:
     image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2024.4.2}
-    restart: unless-stopped
+    restart: on-failure
     command: server
     networks:
       - traefik
@@ -155,10 +157,12 @@ services:
       - "traefik.http.middlewares.authentik.forwardauth.trustForwardHeader=true"
       - "traefik.http.middlewares.authentik.forwardauth.authResponseHeaders=X-authentik-username,X-authentik-groups,X-authentik-email,X-authentik-name,X-authentik-uid,X-authentik-jwt,X-authentik-meta-jwks,X-authentik-meta-outpost,X-authentik-meta-provider,X-authentik-meta-app,X-authentik-meta-version"
       #- "traefik.http.middlewares.authentik.forwardauth.authResponseHeadersRegex=^X-authentik-"
+      - "logging=promtail"
+      - "logging_jobname=authentik_server"
 
   authentik_worker:
     image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2024.4.2}
-    restart: unless-stopped
+    restart: on-failure
     command: worker
     env_file: 
       - settings.env
@@ -186,6 +190,9 @@ services:
     depends_on:
       - postgresql
       - redis
+    labels:
+      - "logging=promtail"
+      - "logging_jobname=authentik_worker"
 
 ###
 ## Test Endpoints
@@ -194,7 +201,7 @@ services:
   whoami-insecure:
     image: "traefik/whoami"
     container_name: "whoami-insecure"
-    restart: unless-stopped
+    restart: on-failure
     networks:
       - traefik
     env_file: 
@@ -212,7 +219,7 @@ services:
   whoami-secure:
     image: traefik/whoami
     container_name: whoami-secure
-    restart: unless-stopped
+    restart: on-failure
     env_file: 
       - settings.env
     security_opt:

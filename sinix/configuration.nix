@@ -26,6 +26,20 @@
   networking.hostId = "224424a8"; # Generated with `head -c4 /dev/urandom | od -A none -t x4`
   networking.enableIPv6 = false; # too much faff, firewall logs always used ipv6 which makes it harder to work with
 
+  # https://nixos.wiki/wiki/Accelerated_Video_Playback
+  nixpkgs.config.packageOverrides = pkgs: {
+    intel-vaapi-driver = pkgs.intel-vaapi-driver.override { enableHybridCodec = true; };
+  };
+  hardware.opengl = {
+    enable = true;
+    extraPackages = with pkgs; [
+      intel-media-driver # LIBVA_DRIVER_NAME=iHD
+      intel-vaapi-driver # LIBVA_DRIVER_NAME=i965 (older but works better for Firefox/Chromium)
+      libvdpau-va-gl
+    ];
+  };
+  environment.sessionVariables = { LIBVA_DRIVER_NAME = "iHD"; }; # Force intel-media-driver
+
   # Pick only one of the below networking options.
   # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
   # networking.networkmanager.enable = true;  # Easiest to use and most distros use this by default.
@@ -75,7 +89,18 @@
     ];
   };
 
-  
+  # Non-privileged user for running docker containers
+  users.users.dockerapp = {
+    uid = 1200;
+    isSystemUser = true;
+    group = "dockerapp";
+    extraGroups = [ "users" ];
+  };
+
+  users.groups.dockerapp = {
+    gid = 1200;
+  };
+
   # Users for Mosquitto (hass stack)
   users.users.mosquitto = {
     uid = 1883;
@@ -306,6 +331,12 @@
     enable = true;
     useRoutingFeatures = "server";
     openFirewall = true;
+  };
+
+  # Prometheus NOde Exporter
+  services.prometheus.exporters.node = {
+      enable = true;
+      port = 9901;
   };
 
   # Copy the NixOS configuration file and link it from the resulting system

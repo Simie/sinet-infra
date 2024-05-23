@@ -1,0 +1,149 @@
+version: '3.4'
+
+networks:
+  traefik:
+    name: infra_traefik
+    external: true
+  monitor-net:
+    driver: bridge
+
+services:
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      #- ./config/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - $SI_DOCKERDIR/telemetry/grafana-data:/var/lib/grafana
+    user: "${SI_DOCKER_APP_USER}"
+    environment:
+      GF_SERVER_ROOT_URL: "https://grafana.${SI_DOMAIN}"
+      GF_AUTH_GENERIC_OAUTH_ENABLED: "true"
+      GF_AUTH_GENERIC_OAUTH_NAME: "authentik"
+      GF_AUTH_GENERIC_OAUTH_CLIENT_ID: "${SI_OPENID_CLIENTID}"
+      GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET: "${SI_OPENID_CLIENTSECRET}"
+      GF_AUTH_GENERIC_OAUTH_SCOPES: "openid profile email"
+      GF_AUTH_GENERIC_OAUTH_AUTH_URL:  "$SI_OPENID_DOMAIN/application/o/authorize/"
+      GF_AUTH_GENERIC_OAUTH_TOKEN_URL: "$SI_OPENID_DOMAIN/application/o/token/"
+      GF_AUTH_GENERIC_OAUTH_API_URL:   "$SI_OPENID_DOMAIN/application/o/userinfo/"
+      GF_AUTH_GENERIC_OAUTH_AUTO_LOGIN: "true"
+      GF_AUTH_SIGNOUT_REDIRECT_URL:    "$SI_OPENID_DOMAIN/application/o/grafana/end-session/"
+      # Optionally map user groups to Grafana roles
+      GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH: "contains(groups, 'Grafana Admins') && 'Admin' || contains(groups, 'Grafana Editors') && 'Editor' || 'Viewer'"
+      GF_SMTP_ENABLED: "true"
+      GF_SMTP_HOST: "$SMTP_SERVER:$SMTP_PORT"
+      GF_SMTP_USER: "$SMTP_USER"
+      GF_SMTP_PASSWORD: "$SMTP_PASSWORD"
+      GF_SMTP_FROM_ADDRESS: "grafana@${SI_DOMAIN}"
+
+    labels:
+      - "traefik.enable=true"
+      ## HTTPS Routers
+      - "traefik.http.routers.grafana-websecure.entrypoints=websecure"
+      - "traefik.http.routers.grafana-websecure.rule=Host(`grafana.${SI_DOMAIN}`)"
+      - "traefik.http.routers.grafana-websecure.tls=true"
+      - "traefik.http.routers.grafana-websecure.tls.certresolver=sinetresolver"
+      - "traefik.http.services.grafana-websecure.loadbalancer.server.port=3000"
+    depends_on:
+      - prometheus
+      - loki
+      - promtail
+    networks:
+      - traefik
+      - monitor-net
+    restart: on-failure
+
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - 3100:3100
+    #command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - "$SI_DOCKERDIR/telemetry/loki-data:/loki"
+    user: "${SI_DOCKER_APP_USER}"
+    networks:
+      - monitor-net
+    restart: on-failure
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    volumes:
+      - ./config/promtail.yaml:/etc/promtail/docker-config.yaml
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/docker-config.yaml
+    user: "0"
+    labels:
+      - "traefik.enable=true"
+      ## HTTPS Routers
+      - "traefik.http.routers.promtail-websecure.entrypoints=websecure"
+      - "traefik.http.routers.promtail-websecure.rule=Host(`promtail.${SI_DOMAIN}`)"
+      - "traefik.http.routers.promtail-websecure.tls=true"
+      - "traefik.http.routers.promtail-websecure.tls.certresolver=sinetresolver"
+      - "traefik.http.services.promtail-websecure.loadbalancer.server.port=9080"
+      ## Middlewares
+      - "traefik.http.routers.promtail-websecure.middlewares=authentik"
+    depends_on:
+      - loki
+    networks:
+      - monitor-net
+      - traefik
+    restart: on-failure
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus/:/etc/prometheus/
+      - $SI_DOCKERDIR/telemetry/prometheus-data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # Communicate with host (to access node-exporter)
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yaml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    user: "${SI_DOCKER_APP_USER}"
+    networks:
+      - monitor-net
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      ## HTTPS Routers
+      - "traefik.http.routers.prometheus-websecure.entrypoints=websecure"
+      - "traefik.http.routers.prometheus-websecure.rule=Host(`prometheus.${SI_DOMAIN}`)"
+      - "traefik.http.routers.prometheus-websecure.tls=true"
+      - "traefik.http.routers.prometheus-websecure.tls.certresolver=sinetresolver"
+      - "traefik.http.services.prometheus-websecure.loadbalancer.server.port=9090"
+      ## Middlewares
+      - "traefik.http.routers.prometheus-websecure.middlewares=authentik"
+      
+      - "logging=promtail"
+    restart: on-failure
+
+# alertmanager:
+#   image: prom/alertmanager
+#   #ports:
+#   #  - 9093:9093
+#   volumes:
+#     - "./alertmanager/:/etc/alertmanager/"
+#   networks:
+#     - monitor-net
+#   command:
+#     - '--config.file=/etc/alertmanager/config.yaml'
+#     - '--storage.path=/alertmanager'
+#   restart: on-failure    
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    user: ""
+    #ports:
+    #  - 8088:8080
+    networks:
+      - monitor-net
+    restart: on-failure
+    labels:
+      - "logging=promtail"
