@@ -21,24 +21,25 @@
 
   # Low-level hardware config
   powerManagement.powertop.enable = true;
+  powerManagement.cpuFreqGovernor = "powersave";
 
   networking.hostName = "sinix"; # Define your hostname.
   networking.hostId = "224424a8"; # Generated with `head -c4 /dev/urandom | od -A none -t x4`
   networking.enableIPv6 = false; # too much faff, firewall logs always used ipv6 which makes it harder to work with
 
-  # https://nixos.wiki/wiki/Accelerated_Video_Playback
-  nixpkgs.config.packageOverrides = pkgs: {
-    intel-vaapi-driver = pkgs.intel-vaapi-driver.override { enableHybridCodec = true; };
-  };
-  hardware.opengl = {
-    enable = true;
-    extraPackages = with pkgs; [
-      intel-media-driver # LIBVA_DRIVER_NAME=iHD
-      intel-vaapi-driver # LIBVA_DRIVER_NAME=i965 (older but works better for Firefox/Chromium)
-      libvdpau-va-gl
-    ];
-  };
-  environment.sessionVariables = { LIBVA_DRIVER_NAME = "iHD"; }; # Force intel-media-driver
+ ## https://nixos.wiki/wiki/Accelerated_Video_Playback
+ #nixpkgs.config.packageOverrides = pkgs: {
+ #  intel-vaapi-driver = pkgs.intel-vaapi-driver.override { enableHybridCodec = true; };
+ #};
+ #hardware.opengl = {
+ #  enable = true;
+ #  extraPackages = with pkgs; [
+ #    intel-media-driver # LIBVA_DRIVER_NAME=iHD
+ #    intel-vaapi-driver # LIBVA_DRIVER_NAME=i965 (older but works better for Firefox/Chromium)
+ #    libvdpau-va-gl
+ #  ];
+ #};
+ #environment.sessionVariables = { LIBVA_DRIVER_NAME = "iHD"; }; # Force intel-media-driver
 
   # Pick only one of the below networking options.
   # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
@@ -122,17 +123,19 @@
     docker-compose
     e2fsprogs # badblocks
     gptfdisk
+    hdparm
+    hd-idle
     htop
     hddtemp
     intel-gpu-tools
     iotop
-    lm_sensors
     mergerfs
     mc
     ncdu
     nmap
     nvme-cli
     parted
+    powertop
     sanoid
     screen
     snapraid
@@ -200,12 +203,20 @@
 
   # Setup disks to spin down after inactivity.
   #powerManagement.powerUpCommands = ''
-  #   ${pkgs.hdparm}/sbin/sdparm -l --set SCT=6000 --set STANDBY=1 /dev/disk/by-label/jbod*
+  #   ${pkgs.hd-idle}/sbin/hd-idle -a sda   -l --set SCT=6000 --set STANDBY=1 /dev/disk/by-label/jbod* 
   #''; #${pkgs.hdparm}/sbin/hdparm -S 1 
 
+  # 3TB WD RED
   fileSystems."/mnt/jbod/jbod1" = 
   {
     device = "/dev/disk/by-label/jbod1";
+    fsType = "ext4";
+  };
+  
+  # 3TB WD RED
+  fileSystems."/mnt/jbod/jbod2" = 
+  {
+    device = "/dev/disk/by-label/jbod2";
     fsType = "ext4";
   };
 
@@ -215,6 +226,7 @@
     depends = [
       "/mnt/tank/fuse"
       "/mnt/jbod/jbod1"
+      "/mnt/jbod/jbod2"
     ];
     fsType = "fuse.mergerfs";
     device = "/mnt/tank/fuse:/mnt/jbod/*"; # fuse first, see below
@@ -228,6 +240,7 @@
   fileSystems."/jbod_storage" = {
     depends = [
       "/mnt/jbod/jbod1"
+#      "/mnt/jbod/jbod2"
     ];
     fsType = "fuse.mergerfs";
     device = "/mnt/jbod/*";
