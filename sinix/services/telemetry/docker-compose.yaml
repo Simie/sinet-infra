@@ -93,6 +93,7 @@ services:
     image: prom/prometheus
     volumes:
       - ./prometheus/:/etc/prometheus/
+      - $SI_SECRETS_DIR/prometheus_homeassist_token:/etc/prometheus/secrets/prometheus_homeassist_token
       - $SI_DOCKERDIR/telemetry/prometheus-data:/prometheus
     extra_hosts:
       - "host.docker.internal:host-gateway" # Communicate with host (to access node-exporter)
