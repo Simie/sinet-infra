@@ -81,7 +81,7 @@
     isNormalUser = true;
     extraGroups = [ "wheel" "users" ];
     packages = with pkgs; [
-      tree
+      tree git
     ];
     openssh.authorizedKeys.keys = [
       "ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAQEAzNTYXbLXqEA8N3AKJO3WkEP7jRt2NTyV62zquwmztWX1yHxfc/KQODIjv7jM4ckOfFN1DccHk8Euv5kx3xB7Ay4B5+CPSm/c7m4Y2GH4aUEvvaUnUr/L9ocWF7Cek0NNCfLxKL5osprHIjFp9ZxuYhZ98RMI4kn1ybe9ukRwSH/xQvm/u8yWsf4j7clvTI7rwy80EHG8+WjYy4eXHuCvcW8AOONAZW20N7g3f0NS+RHMoC1N83mzuJLMt3kCt5BrSjJzapqi0FnJZtq1thY41hybkDx8NgqdeSvw8vOkEyxZsw8TTtJuTR9OutuiuRtgNJo3d6YkpiNYKPJZ0yey7w=="
