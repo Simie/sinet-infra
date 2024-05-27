@@ -14,6 +14,9 @@ sudo zfs set compression=lz4 tank
 sudo zfs create tank/fuse
 sudo zfs set atime=on tank/fuse #atime on so can move files not being access frequently to jbod
 
+sudo zfs create tank/personal
+sudo zfs snapshot -r tank/personal@blank
+
 Tailscale:
 tailscale up --authkey=<key> --advertise-exit-node
 

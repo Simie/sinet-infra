@@ -222,7 +222,7 @@
 
   # Merge JBODs and tank/fuse into one file system
   # Prefer writing to fuse (nvme)
-  fileSystems."/storage" = {
+  fileSystems."/mnt/storage" = {
     depends = [
       "/mnt/tank/fuse"
       "/mnt/jbod/jbod1"
@@ -237,7 +237,7 @@
   };
 
   # Secondary filesystem that is just the jbods - script (WIP) move files from fuse -> jbod_storage if they are not accessed in over ~24hrs
-  fileSystems."/jbod_storage" = {
+  fileSystems."/mnt/jbod_storage" = {
     depends = [
       "/mnt/jbod/jbod1"
 #      "/mnt/jbod/jbod2"
@@ -283,12 +283,13 @@
       guest account = nobody
       map to guest = bad user
       load printers = no
+      unix extensions = no
       hosts allow = 192.168.1. 127.0.0.1 localhost
       hosts deny = 0.0.0.0/0
     '';
     shares = {
       Public = {
-        path = "/storage/Public";
+        path = "/data/Public";
         browseable = "yes";
         "read only" = "no";
         "guest ok" = "yes";
@@ -296,16 +297,18 @@
         "directory mask" = "0777"; # Anyone can read/write/execute
       };
       Personal = {
-        path = "/storage/Personal";
+        path = "/data/Personal";
         browseable = "yes";
         "read only" = "no";
         "guest ok" = "no";
         "create mask" = "0770"; # Only user/group can read/write/execute
         "directory mask" = "0770"; # Only user/group can read/write/execute
         "valid users" = "simon";
+        "follow symlinks" = "yes";
+        "wide links" = "yes";
       };
       appdata = {
-        path = "/mnt/tank/appdata";
+        path = "/appdata";
         browseable = "no";
         "read only" = "no";
         "guest ok" = "no";
