@@ -272,6 +272,9 @@
     openFirewall = true;
   };
 
+  # Dev - enable vscode server
+  services.vscode-server.enable = true;
+
 ##########
 # Samba Shares
 ##########
@@ -332,14 +335,41 @@
 
   # Setup docker
   virtualisation.docker.enable = true;
-  # TODO: docker-compose up on boot?
 
+  systemd.services.stack-infra = {
+    wantedBy = ["multi-user.target"];
 
+    path = [ pkgs.docker-compose ];
+    preStart = "/home/simon/sinet-infra/sinix/services/service-compose infra down && /home/simon/sinet-infra/sinix/services/service-compose infra create"; # Create in preStart so traefik network is available for other stacks.
+    script = "/home/simon/sinet-infra/sinix/services/service-compose infra up";
+    postStop = "/home/simon/sinet-infra/sinix/services/service-compose infra down";
 
+    after = ["docker.service"];
+  };
 
+  systemd.services.stack-telemetry = {
+    wantedBy = ["multi-user.target"];
 
-  # Dev - enable vscode server
-  services.vscode-server.enable = true;
+    path = [ pkgs.docker-compose ];
+    preStart = "/home/simon/sinet-infra/sinix/services/service-compose telemetry down";
+    script = "/home/simon/sinet-infra/sinix/services/service-compose telemetry up";
+    postStop = "/home/simon/sinet-infra/sinix/services/service-compose telemetry down";
+
+    after = [ "stack-infra.service" ];
+    requires = [ "stack-infra.service" ];
+  };
+
+  systemd.services.stack-homeassist = {
+    wantedBy = ["multi-user.target"];
+
+    path = [ pkgs.docker-compose ];
+    preStart = "/home/simon/sinet-infra/sinix/services/service-compose homeassist down";
+    script = "/home/simon/sinet-infra/sinix/services/service-compose homeassist up";
+    postStop = "/home/simon/sinet-infra/sinix/services/service-compose homeassist down";
+
+    after = [ "stack-infra.service" ];
+    requires = [ "stack-infra.service" ];
+  };
 
 ##########
 # Telemetry

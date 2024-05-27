@@ -11,4 +11,4 @@ else
    settings_arg=
 fi
 
-docker-compose --project-directory $targetdir --env-file $servicesdir/../../secrets/secrets.env --env-file ./shared.env $settings_arg "${@:2}"
+docker-compose --project-directory $targetdir --env-file $servicesdir/../../secrets/secrets.env --env-file $servicesdir/shared.env $settings_arg "${@:2}"
