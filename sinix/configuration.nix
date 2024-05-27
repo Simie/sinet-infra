@@ -23,48 +23,39 @@
   powerManagement.powertop.enable = true;
   powerManagement.cpuFreqGovernor = "powersave";
 
-  networking.hostName = "sinix"; # Define your hostname.
-  networking.hostId = "224424a8"; # Generated with `head -c4 /dev/urandom | od -A none -t x4`
-  networking.enableIPv6 = false; # too much faff, firewall logs always used ipv6 which makes it harder to work with
-
- ## https://nixos.wiki/wiki/Accelerated_Video_Playback
- #nixpkgs.config.packageOverrides = pkgs: {
- #  intel-vaapi-driver = pkgs.intel-vaapi-driver.override { enableHybridCodec = true; };
- #};
- #hardware.opengl = {
- #  enable = true;
- #  extraPackages = with pkgs; [
- #    intel-media-driver # LIBVA_DRIVER_NAME=iHD
- #    intel-vaapi-driver # LIBVA_DRIVER_NAME=i965 (older but works better for Firefox/Chromium)
- #    libvdpau-va-gl
- #  ];
- #};
- #environment.sessionVariables = { LIBVA_DRIVER_NAME = "iHD"; }; # Force intel-media-driver
-
-  # Pick only one of the below networking options.
-  # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
-  # networking.networkmanager.enable = true;  # Easiest to use and most distros use this by default.
-
   # Allow unfree packages
   nixpkgs.config.allowUnfree = true;
 
   # Set your time zone.
   time.timeZone = "Europe/London";
 
-  # Configure network proxy if necessary
-  # networking.proxy.default = "http://user:password@proxy:port/";
-  # networking.proxy.noProxy = "127.0.0.1,localhost,internal.domain";
+##########
+# Network Configuration
+##########
 
-  # Select internationalisation properties.
-  # i18n.defaultLocale = "en_US.UTF-8";
-  # console = {
-  #   font = "Lat2-Terminus16";
-  #   keyMap = "us";
-  #   useXkbConfig = true; # use xkb.options in tty.
-  # };
+  networking.hostName = "sinix"; # Define your hostname.
+  networking.hostId = "224424a8"; # Generated with `head -c4 /dev/urandom | od -A none -t x4`
+  networking.enableIPv6 = false; # too much faff, firewall logs always used ipv6 which makes it harder to work with
 
-  # Enable the X11 windowing system.
-  # services.xserver.enable = true;
+  # Open ports in the firewall.
+  networking.firewall = {
+    enable = true;
+    allowedTCPPorts = [ 
+      80 443 # HTTP(S)
+      #40000 # Discovery
+      1400 # SONOS -> HASS
+      1883 # MQTT
+    ];
+    allowedUDPPorts = [
+      #1900 1901 137 136 138 # HASS
+    ];
+    trustedInterfaces = [ "veth_traefik" ];
+    logRefusedConnections = true;
+  };
+
+##########
+# Users
+##########
 
   # Enable ZSH as the default shell
   programs.zsh.enable = true;
@@ -114,6 +105,10 @@
     gid = 1883;
   };
 
+##########
+# Packages
+##########
+
   # List packages installed in system profile. To search, run:
   # $ nix search wget
   environment.systemPackages = with pkgs; [
@@ -147,9 +142,9 @@
     wget
   ];
 
-  # 
-  # File Systems
-  #
+##########
+# File Systems
+##########
 
   # Boot + Root + Swap File Systems
   fileSystems."/" =
@@ -249,15 +244,10 @@
     ];
   };
 
-  # Some programs need SUID wrappers, can be configured further or are
-  # started in user sessions.
-  # programs.mtr.enable = true;
-  # programs.gnupg.agent = {
-  #   enable = true;
-  #   enableSSHSupport = true;
-  # };
 
-  # List services that you want to enable:
+##########
+# System Services
+##########
 
   # Enable the OpenSSH daemon.
   services.openssh = {
@@ -268,6 +258,23 @@
       PermitRootLogin = "prohibit-password";
     };
   };
+
+  # Prometheus Node Exporter
+  services.prometheus.exporters.node = {
+      enable = true;
+      port = 9901;
+  };
+
+  # Tailscale
+  services.tailscale = {
+    enable = true;
+    useRoutingFeatures = "server";
+    openFirewall = true;
+  };
+
+##########
+# Samba Shares
+##########
 
   services.samba-wsdd.enable = true; # make shares visible for windows 10 clients
   services.samba = {
@@ -319,41 +326,24 @@
     };
   };
   
+##########
+# Docker configuration + systemd wrappers for service stacks
+##########
+
   # Setup docker
   virtualisation.docker.enable = true;
   # TODO: docker-compose up on boot?
 
+
+
+
+
   # Dev - enable vscode server
   services.vscode-server.enable = true;
 
-  # Open ports in the firewall.
-  networking.firewall = {
-    enable = true;
-    allowedTCPPorts = [ 
-      80 443 # HTTP(S)
-      #40000 # Discovery
-      1400 # SONOS -> HASS
-      1883 # MQTT
-    ];
-    allowedUDPPorts = [
-      #1900 1901 137 136 138 # HASS
-    ];
-    trustedInterfaces = [ "veth_traefik" ];
-    logRefusedConnections = true;
-  };
-
-  # Tailscale
-  services.tailscale = {
-    enable = true;
-    useRoutingFeatures = "server";
-    openFirewall = true;
-  };
-
-  # Prometheus NOde Exporter
-  services.prometheus.exporters.node = {
-      enable = true;
-      port = 9901;
-  };
+##########
+# Telemetry
+##########
 
   # Copy the NixOS configuration file and link it from the resulting system
   # (/run/current-system/configuration.nix). This is useful in case you
