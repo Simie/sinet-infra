@@ -1,3 +1,13 @@
-To start infra stack:
+### Usage
 
-sudo docker-compose --project-directory ./infra --env-file ~/secrets.env --env-file shared.env --env-file infra/settings.env up
+To start a stack:
+
+sudo ./service-compose <stack name> up \[-d\]
+
+-d to detatch.
+
+Service stacks are usually started/stopped via systemd - see configuration.nix
+
+### service-compose
+
+Simple helper script to call docker-compose with the directory set correctly, and include all the env files (<stack folder>/settings.env, ./shared.env, <secrets_dir>/secrets.env)
