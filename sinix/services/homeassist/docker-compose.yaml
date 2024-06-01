@@ -16,7 +16,7 @@ services:
     hostname: "hass"
     image: "ghcr.io/home-assistant/home-assistant:stable"
     volumes:
-      - /${SI_DOCKERDIR}/homeassist/homeassistant:/config
+      - /${SI_DOCKERDIR}/stack-homeassist/homeassistant:/config
       - /etc/localtime:/etc/localtime:ro
       - /run/dbus:/run/dbus:ro
     depends_on:
@@ -53,7 +53,7 @@ services:
     #ports:
     #  - 1880:1880
     volumes:
-      - /${SI_DOCKERDIR}/homeassist/node-red:/data
+      - /${SI_DOCKERDIR}/stack-homeassist/node-red:/data
     depends_on:
       - homeassistant
       - mosquitto
@@ -80,9 +80,9 @@ services:
     ports:
       - "1883:1883/tcp"
     volumes:
-      - /${SI_DOCKERDIR}/homeassist/mosquitto/config:/mosquitto/config
-      - /${SI_DOCKERDIR}/homeassist/mosquitto/data:/mosquitto/data
-      - /${SI_DOCKERDIR}/homeassist/mosquitto/log:/mosquitto/log
+      - /${SI_DOCKERDIR}/stack-homeassist/mosquitto/config:/mosquitto/config
+      - /${SI_DOCKERDIR}/stack-homeassist/mosquitto/data:/mosquitto/data
+      - /${SI_DOCKERDIR}/stack-homeassist/mosquitto/log:/mosquitto/log
     env_file: 
       - settings.env
     user: "1883:1883" # mosquitto/mosquitto
@@ -101,8 +101,8 @@ services:
     env_file: 
       - settings.env
     volumes:
-      - "/${SI_DOCKERDIR}/homeassist/configurator-config:/config"
-      - "/${SI_DOCKERDIR}/homeassist/homeassistant:/hass-config"
+      - "/${SI_DOCKERDIR}/stack-homeassist/configurator-config:/config"
+      - "/${SI_DOCKERDIR}/stack-homeassist/homeassistant:/hass-config"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.hass-config-websecure.entrypoints=websecure"

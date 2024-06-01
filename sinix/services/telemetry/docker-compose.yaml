@@ -12,7 +12,7 @@ services:
     image: grafana/grafana:latest
     volumes:
       #- ./config/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
-      - $SI_DOCKERDIR/telemetry/grafana-data:/var/lib/grafana
+      - $SI_DOCKERDIR/stack-telemetry/grafana-data:/var/lib/grafana
     user: "${SI_DOCKER_APP_USER}"
     environment:
       GF_SERVER_ROOT_URL: "https://grafana.${SI_DOMAIN}"
@@ -57,7 +57,7 @@ services:
       - 3100:3100
     #command: -config.file=/etc/loki/local-config.yaml
     volumes:
-      - "$SI_DOCKERDIR/telemetry/loki-data:/loki"
+      - "$SI_DOCKERDIR/stack-telemetry/loki-data:/loki"
     user: "${SI_DOCKER_APP_USER}"
     networks:
       - monitor-net
@@ -94,7 +94,7 @@ services:
     volumes:
       - ./prometheus/:/etc/prometheus/
       - $SI_SECRETSDIR/prometheus_homeassist_token:/etc/prometheus/secrets/prometheus_homeassist_token
-      - $SI_DOCKERDIR/telemetry/prometheus-data:/prometheus
+      - $SI_DOCKERDIR/stack-telemetry/prometheus-data:/prometheus
     extra_hosts:
       - "host.docker.internal:host-gateway" # Communicate with host (to access node-exporter)
     command:
