@@ -1,11 +1,18 @@
 version: '3.4'
 
 networks:
+  external:
+    name: a_host_bridge # Network defined in infra that allows access to internet and host via host-gateway
+    external: true
+    #driver: bridge
+    #driver_opts:
+    #  com.docker.network.bridge.name: veth_monitornet # give it a specific name so we can add to trusted interfaces in the firewall (configuration.nix)
   traefik:
-    name: infra_traefik
+    name: traefik
     external: true
   monitor-net:
     driver: bridge
+    #internal: true # No external network access
 
 services:
   grafana:
@@ -47,6 +54,7 @@ services:
       - loki
       - promtail
     networks:
+      - external # Allow external network access
       - traefik
       - monitor-net
     restart: on-failure
@@ -104,6 +112,7 @@ services:
       - '--web.console.templates=/usr/share/prometheus/consoles'
     user: "${SI_DOCKER_APP_USER}"
     networks:
+      - external # Required to talk to host via host.docker.internal
       - monitor-net
       - traefik
     labels:

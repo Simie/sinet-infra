@@ -4,7 +4,7 @@ networks:
   default:
     driver: bridge
   traefik:
-    name: infra_traefik
+    name: traefik
     external: true
   #macvlan-lan:
   #  name: infra_macvlan-lan

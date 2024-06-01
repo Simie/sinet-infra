@@ -1,18 +1,27 @@
 version: "3.3"
 
 networks:
-  default:
-    driver: bridge
-  traefik: # Network used to allow traefiq to talk to other containers. Any container that traefik is proxying needs to be on this network or on host network.
+  traefik_host:
+    name: a_host_bridge # a_ prefix makes it alphabetically first, so it's used for routing to the host before any other networks.
     driver: bridge
     driver_opts:
       com.docker.network.bridge.name: veth_traefik # give it a specific name so we can add to trusted interfaces in the firewall (configuration.nix)
     ipam:
       driver: default
       config:
-        - subnet: 172.100.0.0/16
+        - subnet: 172.100.0.0/16 # IP range for host networking services to use when adding traefik as a trusted reverse proxy
+
+  traefik: # Network used to allow traefiq to talk to other containers. Any container that traefik is proxying needs to be on this network or on host network (see traefik_host).
+    name: traefik
+    internal: true # Internal so being added to traefik's reverse proxy network doesn't automatically grant internet access
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.101.0.0/16 # IP range for services to use when adding traefik as a trusted reverse proxy
+
   internal:
     name: z_internal # Z_ prefix makes it alphabetically after traefik, so traefik is used as the default route when accessing the host. (ugh)
+    internal: true # No internet access
 
 services:
 
@@ -25,12 +34,11 @@ services:
     container_name: "traefik"
     hostname: "traefik"
     networks:
-      #default:
       internal:
-      traefik:
+      traefik_host:
         ipv4_address: 172.100.1.2 # Fixed IP so it can be allowed by services with trusted reverse proxy lists
-      #macvlan-lan:
-      #  ipv4_address: 192.168.2.2
+      traefik:
+        ipv4_address: 172.101.1.2 # Fixed IP so it can be allowed by services with trusted reverse proxy lists
     extra_hosts:
       - "host.docker.internal:host-gateway" # Communicate with host (For HASS)
     env_file: 
@@ -43,7 +51,7 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entryPoints.web.address=:80"
       - "--entryPoints.websecure.address=:443"
-      - "--providers.docker.network=infra_traefik" # Otherwise it sometimes tries to use internal network to talk to host, which breaks firewall allowing access to host from this containers fixed ip
+      - "--providers.docker.network=traefik" # Otherwise it sometimes tries to use internal network to talk to host, which breaks firewall allowing access to host from this containers fixed ip
 
       - "--certificatesresolvers.sinetresolver.acme.dnschallenge=true"
       - "--certificatesresolvers.sinetresolver.acme.dnschallenge.provider=cloudflare"
@@ -208,13 +216,17 @@ services:
       - settings.env
     labels:
       - "traefik.enable=true"
-      # HTTP
+      # Services
+      - "traefik.http.services.whoami-insecure.loadbalancer.server.port=80"
+      # HTTP Router
       - "traefik.http.routers.whoami-insecure-web.rule=Host(`whoami.$SI_DOMAIN`)"
       - "traefik.http.routers.whoami-insecure-web.entrypoints=web"
-      # HTTPS
+      - "traefik.http.routers.whoami-insecure-web.service=whoami-insecure"
+      # HTTPS Router
       - "traefik.http.routers.whoami-insecure-websecure.rule=Host(`whoami.$SI_DOMAIN`)"
       - "traefik.http.routers.whoami-insecure-websecure.entrypoints=websecure"
       - "traefik.http.routers.whoami-insecure-websecure.tls.certresolver=sinetresolver"
+      - "traefik.http.routers.whoami-insecure-websecure.service=whoami-insecure"
 
   whoami-secure:
     image: traefik/whoami
@@ -228,13 +240,33 @@ services:
       - traefik
     labels:
       - "traefik.enable=true"
-      ## HTTPS Routers
+      ## Service
+      - "traefik.http.services.whoami-secure-websecure.loadbalancer.server.port=80"
+      ## HTTPS Router
       - "traefik.http.routers.whoami-secure-websecure.rule=Host(`whoami-secure.$SI_DOMAIN`)"
       - "traefik.http.routers.whoami-secure-websecure.entrypoints=websecure"
       - "traefik.http.routers.whoami-secure-websecure.tls=true"
       - "traefik.http.routers.whoami-secure-websecure.tls.certresolver=sinetresolver"
       ## Middlewares
       - "traefik.http.routers.whoami-secure-websecure.middlewares=authentik"
+
+  # Used to verify that access to internet / other networks is blocked when using traefik network.
+# webnettools:
+#   image: johannesschafer/webnettools
+#   restart: on-failure
+#   env_file: 
+#     - settings.env
+#   networks:
+#     - traefik
+#   labels:
+#     - "traefik.enable=true"
+#     ## Service
+#     - "traefik.http.services.webnettools.loadbalancer.server.port=8080"
+#     ## HTTPS Router
+#     - "traefik.http.routers.webnettools-websecure.rule=Host(`webnettools.$SI_DOMAIN`)"
+#     - "traefik.http.routers.webnettools-websecure.entrypoints=websecure"
+#     - "traefik.http.routers.webnettools-websecure.tls=true"
+#     - "traefik.http.routers.webnettools-websecure.tls.certresolver=sinetresolver"
 
 volumes:
   redis:
