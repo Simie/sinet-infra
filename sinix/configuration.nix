@@ -220,6 +220,7 @@
     autoScrub.enable = true;
 
     autoSnapshot = {
+      enable = true;
       frequent = 4;
       hourly = 24;
       daily = 7;
@@ -333,6 +334,12 @@
       port = 9901;
   };
 
+  # Prometheus ZFS exporter
+  services.prometheus.exporters.zfs = {
+    enable = true;
+    port = 9902;
+  };
+
   # Tailscale
   services.tailscale = {
     enable = true;
@@ -413,7 +420,7 @@
     enable = true;
     openFirewall = true;
     nssmdns4 = true;
-    domainName = "sinet.uk";
+    allowInterfaces = ["eno1"];
 
     publish = {
       enable = true;
@@ -434,7 +441,7 @@
     path = [ pkgs.docker-compose ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "/home/simon/sinet-infra/sinix/services/service-compose infra up";
+      ExecStart = "/home/simon/sinet-infra/sinix/services/service-compose infra up --wait";
       ExecStop = "/home/simon/sinet-infra/sinix/services/service-compose infra down";
       RemainAfterExit = "yes";
     };

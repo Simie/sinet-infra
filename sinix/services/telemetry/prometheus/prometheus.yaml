@@ -43,6 +43,22 @@ scrape_configs:
     static_configs:
       - targets: ['host.docker.internal:9901']
 
+  - job_name: zfs_exporter
+    metrics_path: /metrics
+    scrape_interval: 5m
+    scrape_timeout: 60s
+    static_configs:
+      - targets: [host.docker.internal:9902] 
+    metric_relabel_configs:
+      - source_labels: ['name']
+        regex: ^([^@]*).*$
+        target_label: filesystem
+        replacement: ${1}
+      - source_labels: ['name']
+        regex: ^.*:.._(.*)$
+        target_label: snapshot_type
+        replacement: ${1}
+
   - job_name: 'home-assistant'
     scrape_interval: 15s
     metrics_path: /api/prometheus
