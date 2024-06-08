@@ -45,6 +45,7 @@
       #40000 # Discovery
       1400 # SONOS -> HASS
       1883 # MQTT
+      548 # Netatalk (time machine backup)
     ];
     allowedUDPPorts = [
       #1900 1901 137 136 138 # HASS
@@ -71,7 +72,10 @@
 
   users.users.simon = {
     isNormalUser = true;
-    extraGroups = [ "wheel" "users" ];
+    extraGroups = [ 
+      "wheel" "users" 
+      "dockerapp" # Allow access to files owned by docker apps (e.g. paperless)
+    ];
     packages = with pkgs; [
       tree git
     ];
@@ -81,7 +85,17 @@
     ];
   };
 
+  users.users.timemachine = {
+    isNormalUser = true;
+  };
+  
+  # Set users group to well known ID
+  #users.groups.users = {
+  #  gid = 100;
+  #};
+
   # Non-privileged user for running docker containers
+  # Has access to 'users' files so it can act on network shares like a normal user.
   users.users.dockerapp = {
     uid = 1200;
     isSystemUser = true;
@@ -117,6 +131,7 @@
     rclone
     docker-compose
     e2fsprogs # badblocks
+    fatrace # Track filesystem events to detect why disks spin up/down
     gptfdisk
     hdparm
     hd-idle
@@ -168,7 +183,6 @@
   # enable ZFS
   boot.supportedFilesystems = [ "zfs" ];
   boot.zfs.forceImportRoot = false;
-  
   boot.zfs.extraPools = [ "tank" ];
 
   # File systems are automatically mounted by zfs pool - here for reference.
@@ -180,19 +194,40 @@
 
   # appdata file system for docker data etc
   # atime = off
+  # autosnapshot = on
   fileSystems."/mnt/tank/appdata" = {
     device = "tank/appdata";
+    fsType = "zfs";
+  };
+
+  # personal data file system
+  # atime = off
+  # autosnapshot = on
+  fileSystems."/mnt/tank/personal" = {
+    device = "tank/personal";
     fsType = "zfs";
   };*/
   
   # file system to be merged into mergerfs
   # atime = on
+  # autosnapshot = off
   #fileSystems."/mnt/tank/fuse" = {
   #  device = "tank/fuse";
   #  fsType = "zfs";
   #};*/
-  
-  services.zfs.autoScrub.enable = true;
+
+  services.zfs = {
+    autoScrub.enable = true;
+
+    autoSnapshot = {
+      frequent = 4;
+      hourly = 24;
+      daily = 7;
+      weekly = 4;
+      monthly = 6;
+      flags = "-k -p --utc";
+    };
+  };
 
   # JBODs - the spinning disks
 
@@ -201,6 +236,13 @@
   #   ${pkgs.hd-idle}/sbin/hd-idle -a sda   -l --set SCT=6000 --set STANDBY=1 /dev/disk/by-label/jbod* 
   #''; #${pkgs.hdparm}/sbin/hdparm -S 1 
 
+  # 6TB Seagate Ironwolf
+  fileSystems."/mnt/jbod/parity1" = 
+  {
+    device = "/dev/disk/by-label/parity1";
+    fsType = "ext4";
+  };
+  
   # 3TB WD RED
   fileSystems."/mnt/jbod/jbod1" = 
   {
@@ -215,8 +257,35 @@
     fsType = "ext4";
   };
 
+  # Snapraid configuration
+  services.snapraid = {
+    enable = true;
+    
+    parityFiles = [
+      "/mnt/jbod/parity1/snapraid.parity"
+    ];
+
+    dataDisks = {
+      d1 = "/mnt/jbod/jbod1";
+      d2 = "/mnt/jbod/jbod2";
+    };
+
+    contentFiles = [
+      "/mnt/jbod/jbod1/snapraid.content"
+      "/mnt/jbod/jbod2/snapraid.content"
+    ];
+
+    exclude = [
+      "*.unrecoverable"
+      "/tmp/"
+      "/lost+found/"
+    ];
+
+    sync.interval = "2:00"; # Daily 2AM
+  };
+
   # Merge JBODs and tank/fuse into one file system
-  # Prefer writing to fuse (nvme)
+  # Prefer writing to fuse (nvme) for performance during e.g. downloads.
   fileSystems."/mnt/storage" = {
     depends = [
       "/mnt/tank/fuse"
@@ -231,7 +300,7 @@
     ];
   };
 
-  # Secondary filesystem that is just the jbods - script (WIP) move files from fuse -> jbod_storage if they are not accessed in over ~24hrs
+  # Secondary filesystem that is just the jbods - script (WIP) will move files from fuse -> jbod_storage if they are not accessed in over ~24hrs
   fileSystems."/mnt/jbod_storage" = {
     depends = [
       "/mnt/jbod/jbod1"
@@ -243,7 +312,6 @@
       "defaults" "nonempty" "allow_other" "use_ino" "cache.files=off" "moveonenospc=true" "dropcacheonclose=true" "minfreespace=200G" "category.create=mfs"
     ];
   };
-
 
 ##########
 # System Services
@@ -292,6 +360,8 @@
       guest ok = yes
       guest account = nobody
       map to guest = bad user
+      force user = dockerapp
+      force group = dockerapp
       load printers = no
       unix extensions = no
       hosts allow = 192.168.1. 127.0.0.1 localhost
@@ -303,7 +373,7 @@
         browseable = "yes";
         "read only" = "no";
         "guest ok" = "yes";
-        "create mask" = "0666"; # Anyone can read/write, no execute
+        "create mask" = "0666"; # Anyone can read/write, no execute.
         "directory mask" = "0777"; # Anyone can read/write/execute
       };
       Personal = {
@@ -313,19 +383,41 @@
         "guest ok" = "no";
         "create mask" = "0770"; # Only user/group can read/write/execute
         "directory mask" = "0770"; # Only user/group can read/write/execute
-        "valid users" = "simon";
+        "valid users" = "simon"; # Only allow access to specific users (in this case, me)
         "follow symlinks" = "yes";
         "wide links" = "yes";
       };
-      appdata = {
-        path = "/appdata";
-        browseable = "no";
-        "read only" = "no";
-        "guest ok" = "no";
-        "create mask" = "0644"; # TODO
-        "directory mask" = "0755";
-        "admin users" = "simon";
+    };
+  };
+
+##########
+# Time machine backup
+##########
+
+  services.netatalk = {
+    enable = true;
+    port = 548; # Default, opened in firewall in networking section
+    settings = {
+      Global = {
+        "mimic model" = "TimeCapsule6,106";  # show the icon for the first gen TC
       };
+      time-machine = {
+          path = "/mnt/storage/backups/time-machine";
+          "valid users" = "timemachine";
+          "time machine" = true;
+      };
+    };
+  };
+
+  services.avahi = {
+    enable = true;
+    openFirewall = true;
+    nssmdns4 = true;
+    domainName = "sinet.uk";
+
+    publish = {
+      enable = true;
+      userServices = true;
     };
   };
   
@@ -335,14 +427,17 @@
 
   # Setup docker
   virtualisation.docker.enable = true;
+  virtualisation.docker.autoPrune.enable = true;
 
   systemd.services.stack-infra = {
     wantedBy = ["multi-user.target"];
-
     path = [ pkgs.docker-compose ];
-    preStart = "/home/simon/sinet-infra/sinix/services/service-compose infra down && /home/simon/sinet-infra/sinix/services/service-compose infra create"; # Create in preStart so traefik network is available for other stacks.
-    script = "/home/simon/sinet-infra/sinix/services/service-compose infra up";
-    postStop = "/home/simon/sinet-infra/sinix/services/service-compose infra down";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "/home/simon/sinet-infra/sinix/services/service-compose infra up";
+      ExecStop = "/home/simon/sinet-infra/sinix/services/service-compose infra down";
+      RemainAfterExit = "yes";
+    };
 
     after = ["docker.service"];
   };
@@ -356,7 +451,6 @@
     postStop = "/home/simon/sinet-infra/sinix/services/service-compose telemetry down";
 
     after = [ "stack-infra.service" ];
-    requires = [ "stack-infra.service" ];
   };
 
   systemd.services.stack-homeassist = {
@@ -368,7 +462,6 @@
     postStop = "/home/simon/sinet-infra/sinix/services/service-compose homeassist down";
 
     after = [ "stack-infra.service" ];
-    requires = [ "stack-infra.service" ];
   };
 
 ##########

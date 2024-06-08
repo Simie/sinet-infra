@@ -4,18 +4,21 @@ Things I needed to do in addition to nix cfg
 ZFS setup:
 
 sudo zpool create tank mirror -m /mnt/tank -o ashift=12 nvme-Samsung_SSD_970_EVO_1TB_S5H9NC0MC33874L nvme-Samsung_SSD_970_EVO_Plus_1TB_S4EWNF0N401693R
+sudo zfs set atime=off tank
+sudo zfs set compression=lz4 tank
 
 sudo zfs create tank/appdata
 sudo zfs snapshot -r tank/appdata@blank
+sudo zfs set com.sun:auto-snapshot=true tank/appdata
 
-sudo zfs set atime=off tank
-sudo zfs set compression=lz4 tank
+sudo zfs set com.sun:auto-snapshot=true
 
 sudo zfs create tank/fuse
 sudo zfs set atime=on tank/fuse #atime on so can move files not being access frequently to jbod
 
 sudo zfs create tank/personal
 sudo zfs snapshot -r tank/personal@blank
+sudo zfs set com.sun:auto-snapshot=true tank/personal
 
 Tailscale:
 tailscale up --authkey=<key> --advertise-exit-node
