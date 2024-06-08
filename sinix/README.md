@@ -31,6 +31,7 @@ This is the configuration and storage for various self-hosted applications. Some
 
 - Stored on ZFS mirror
 - Backed up offsite nightly 
+- Less frequent snapshot strategy than Personal data as higher churn.
 
 ### Reproducable
 
