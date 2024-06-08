@@ -1,5 +1,3 @@
-version: '3.4'
-
 networks:
   external:
     name: a_host_bridge # Network defined in infra that allows access to internet and host via host-gateway
@@ -78,6 +76,7 @@ services:
       - ./config/promtail.yaml:/etc/promtail/docker-config.yaml
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock
+      - /var/log/journal:/var/log/journal
     command: -config.file=/etc/promtail/docker-config.yaml
     user: "0"
     labels:

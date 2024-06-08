@@ -35,12 +35,13 @@ scrape_configs:
       - source_labels: ['__meta_docker_container_label_logging_jobname']
         target_label: 'job'
 
-#  - job_name: journal
-#    journal:
-#      max_age: 12h
-#      labels:
-#        job: systemd-journal
-#        host: sinix
-#    relabel_configs:
-#      - source_labels: ["__journal__systemd_unit"]
-#        target_label: "unit"
+  - job_name: journal
+    journal:
+      max_age: 12h
+      labels:
+        job: systemd-journal
+        host: sinix
+      path: /var/log/journal
+    relabel_configs:
+      - source_labels: ["__journal__systemd_unit"]
+        target_label: "unit"
