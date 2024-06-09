@@ -216,20 +216,6 @@
   #  fsType = "zfs";
   #};*/
 
-  services.zfs = {
-    autoScrub.enable = true;
-
-    autoSnapshot = {
-      enable = true;
-      frequent = 4;
-      hourly = 24;
-      daily = 7;
-      weekly = 4;
-      monthly = 6;
-      flags = "-k -p --utc";
-    };
-  };
-
   # JBODs - the spinning disks
 
   # Setup disks to spin down after inactivity.
@@ -256,33 +242,6 @@
   {
     device = "/dev/disk/by-label/jbod2";
     fsType = "ext4";
-  };
-
-  # Snapraid configuration
-  services.snapraid = {
-    enable = true;
-    
-    parityFiles = [
-      "/mnt/jbod/parity1/snapraid.parity"
-    ];
-
-    dataDisks = {
-      d1 = "/mnt/jbod/jbod1";
-      d2 = "/mnt/jbod/jbod2";
-    };
-
-    contentFiles = [
-      "/mnt/jbod/jbod1/snapraid.content"
-      "/mnt/jbod/jbod2/snapraid.content"
-    ];
-
-    exclude = [
-      "*.unrecoverable"
-      "/tmp/"
-      "/lost+found/"
-    ];
-
-    sync.interval = "2:00"; # Daily 2AM
   };
 
   # Merge JBODs and tank/fuse into one file system
@@ -314,6 +273,80 @@
     ];
   };
 
+#########
+# Backups / Replication
+#########
+
+  # Snapraid configuration
+  services.snapraid = {
+    enable = true;
+    
+    parityFiles = [
+      "/mnt/jbod/parity1/snapraid.parity"
+    ];
+
+    dataDisks = {
+      d1 = "/mnt/jbod/jbod1";
+      d2 = "/mnt/jbod/jbod2";
+    };
+
+    contentFiles = [
+      "/mnt/jbod/jbod1/snapraid.content"
+      "/mnt/jbod/jbod2/snapraid.content"
+    ];
+
+    exclude = [
+      "*.unrecoverable"
+      "/tmp/"
+      "/lost+found/"
+    ];
+
+    sync.interval = "2:00"; # Daily 2AM
+  };
+  
+  # Sanoid - automatic zfs snapshots
+  services.sanoid = {
+    enable = true;
+
+    # Personal data likely to be changed/deleted and need recovery a long time after the fact
+    templates.personaldata = {
+      yearly = 2;
+      monthly = 12;
+      weekly = 4;
+      daily = 7;
+      hourly = 24;
+      autosnap = true;
+      autoprune = true;
+    };
+
+    # More rapid turnover data (database and such), less frequent snapshots to avoid bloating disk
+    templates.appdata = {
+      monthly = 2;
+      weekly = 2;
+      daily = 7;
+      hourly = 10;
+      autosnap = true;
+      autoprune = true;
+    };
+
+    datasets."tank/personal" = {
+      useTemplate = ["personaldata"];
+    };
+
+    datasets."tank/appdata" = {
+      useTemplate = ["appdata"];
+    };
+  };
+
+#  # Restic - remote backups
+#  services.restic = {
+#    backups = {
+#      appdata = {
+#        repository = "";
+#      }
+#    }
+#  };
+
 ##########
 # System Services
 ##########
@@ -336,7 +369,7 @@
 
   # Prometheus ZFS exporter
   services.prometheus.exporters.zfs = {
-    enable = true;
+    enable = false; # Doesn't seem to be needed, node exporter has the same info
     port = 9902;
   };
 
@@ -412,6 +445,7 @@
           path = "/mnt/storage/backups/time-machine";
           "valid users" = "timemachine";
           "time machine" = true;
+          "vol size limit" = 1024 * 850; # 850GB 
       };
     };
   };
