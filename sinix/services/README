@@ -10,4 +10,4 @@ Service stacks are usually started/stopped via systemd - see configuration.nix
 
 ### service-compose
 
-Simple helper script to call docker-compose with the directory set correctly, and include all the env files (<stack folder>/settings.env, ./shared.env, <secrets_dir>/secrets.env)
+Simple helper script to call docker-compose with the directory set correctly, and include all the env files (<stack folder>/settings.env, ./shared.env, /etc/nixos/secrets/secrets.env)

@@ -511,8 +511,8 @@
     path = [ pkgs.docker-compose ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "/home/simon/sinet-infra/sinix/services/service-compose infra up --wait";
-      ExecStop = "/home/simon/sinet-infra/sinix/services/service-compose infra down";
+      ExecStart = "/etc/nixos/sinet-infra/sinix/services/service-compose infra up --wait";
+      ExecStop = "/etc/nixos/sinet-infra/sinix/services/service-compose infra down";
       RemainAfterExit = "yes";
     };
 
@@ -523,9 +523,9 @@
     wantedBy = ["multi-user.target"];
 
     path = [ pkgs.docker-compose ];
-    preStart = "/home/simon/sinet-infra/sinix/services/service-compose telemetry down";
-    script = "/home/simon/sinet-infra/sinix/services/service-compose telemetry up";
-    postStop = "/home/simon/sinet-infra/sinix/services/service-compose telemetry down";
+    preStart = "/etc/nixos/sinet-infra/sinix/services/service-compose telemetry down";
+    script = "/etc/nixos/sinet-infra/sinix/services/service-compose telemetry up";
+    postStop = "/etc/nixos//sinet-infra/sinix/services/service-compose telemetry down";
 
     after = [ "stack-infra.service" ];
   };
@@ -534,9 +534,9 @@
     wantedBy = ["multi-user.target"];
 
     path = [ pkgs.docker-compose ];
-    preStart = "/home/simon/sinet-infra/sinix/services/service-compose homeassist down";
-    script = "/home/simon/sinet-infra/sinix/services/service-compose homeassist up";
-    postStop = "/home/simon/sinet-infra/sinix/services/service-compose homeassist down";
+    preStart = "/etc/nixos/sinet-infra/sinix/services/service-compose homeassist down";
+    script = "/etc/nixos/sinet-infra/sinix/services/service-compose homeassist up";
+    postStop = "/etc/nixos/sinet-infra/sinix/services/service-compose homeassist down";
 
     after = [ "stack-infra.service" ];
   };
