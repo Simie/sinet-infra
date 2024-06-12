@@ -61,9 +61,11 @@
   # Enable ZSH as the default shell
   programs.zsh.enable = true;
   users.defaultUserShell = pkgs.zsh;  
+  users.groups.ssh  = {}; # Define a group for users allowed login remotely via SSH
 
   # Setup Users
   users.users.root = {
+    extraGroups = [ "ssh" ];
     openssh.authorizedKeys.keys = [
       "ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAQEAzNTYXbLXqEA8N3AKJO3WkEP7jRt2NTyV62zquwmztWX1yHxfc/KQODIjv7jM4ckOfFN1DccHk8Euv5kx3xB7Ay4B5+CPSm/c7m4Y2GH4aUEvvaUnUr/L9ocWF7Cek0NNCfLxKL5osprHIjFp9ZxuYhZ98RMI4kn1ybe9ukRwSH/xQvm/u8yWsf4j7clvTI7rwy80EHG8+WjYy4eXHuCvcW8AOONAZW20N7g3f0NS+RHMoC1N83mzuJLMt3kCt5BrSjJzapqi0FnJZtq1thY41hybkDx8NgqdeSvw8vOkEyxZsw8TTtJuTR9OutuiuRtgNJo3d6YkpiNYKPJZ0yey7w=="
       "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDTD26x297eNd4KiRL2UahydEdIRHVgya85jRQXq8gGO6UYjWlpVPLh1fHmiZdYoWv/vaLPppWe9c4DPUdKKQBx42q0F4NxgwthGNuDVXwniNKo2laEH4/+Xf4oUiGnrNVMotM64JG8k49PZnHYnYa7VdwAzCNMlHV1cigMauSA4Van8su9/6DG3lJ9mFxzYFXz6pzmPRxo2NI3u/MANBIs+nYy0do18bC+wBTKQbyxMCAC0A3ObNVh3OXJqq90wnqJugpGAQhWtk2mbqyZJnP8Yml6/hm59qlzVQbz7pXVMmGpFfmWwPQfQuL//7xUqw/3UFBU6dFPxCPrF2kT9jS/"
@@ -73,7 +75,7 @@
   users.users.simon = {
     isNormalUser = true;
     extraGroups = [ 
-      "wheel" "users" 
+      "wheel" "users" "ssh"
       "dockerapp" # Allow access to files owned by docker apps (e.g. paperless)
     ];
     packages = with pkgs; [
@@ -304,7 +306,7 @@
     sync.interval = "2:00"; # Daily 2AM
   };
   
-  # Sanoid - automatic zfs snapshots
+  # Sanoid - automatic zfs snapshots (local only)
   services.sanoid = {
     enable = true;
 
@@ -338,14 +340,36 @@
     };
   };
 
-#  # Restic - remote backups
-#  services.restic = {
-#    backups = {
-#      appdata = {
-#        repository = "";
-#      }
-#    }
-#  };
+  # Restic - remote backups
+  services.restic = {
+    backups = {
+      remote-terra = {
+        extraOptions = [
+          "sftp.command='ssh remotebackup@terra.sinet.uk -i /etc/nixos/secrets/remotebackup-private-key -s sftp'"
+        ];
+        passwordFile = "/etc/nixos/secrets/restic-password";
+        paths = [
+          "/mnt/tank/appdata"
+          "/mnt/tank/personal"
+          "/mnt/storage/personal"
+        ];
+        repository = "sftp:remotebackup@terra.sinet.uk:/data/Backup/sinixbackups";
+        timerConfig = {
+          OnCalendar = "04:30";
+          RandomizedDelaySec = "5m";
+        };
+
+        initialize = true;
+
+        pruneOpts = [
+          "--keep-daily 7"
+          "--keep-weekly 5"
+          "--keep-monthly 12"
+          "--keep-yearly 1"
+        ];
+      };
+    };
+  };
 
 ##########
 # System Services
@@ -358,6 +382,7 @@
     settings = {
       PasswordAuthentication = false;
       PermitRootLogin = "prohibit-password";
+      AllowGroups = ["ssh"];
     };
   };
 
@@ -365,12 +390,23 @@
   services.prometheus.exporters.node = {
       enable = true;
       port = 9901;
+      enabledCollectors = [ "systemd" ];
+      extraFlags = [
+        "--collector.netdev.device-exclude=^(veth|br-)" # Trim out docker garbage networks
+      ];
   };
 
   # Prometheus ZFS exporter
   services.prometheus.exporters.zfs = {
     enable = false; # Doesn't seem to be needed, node exporter has the same info
     port = 9902;
+  };
+
+  # Prometheus systemd exporter
+  # Used by alert manager etc so I can tell when backup jobs fail
+  services.prometheus.exporters.systemd = {
+    enable = true;
+    port = 9903;
   };
 
   # Tailscale
@@ -445,7 +481,7 @@
           path = "/mnt/storage/backups/time-machine";
           "valid users" = "timemachine";
           "time machine" = true;
-          "vol size limit" = 1024 * 850; # 850GB 
+          "vol size limit" = 768000; # 750GB
       };
     };
   };
