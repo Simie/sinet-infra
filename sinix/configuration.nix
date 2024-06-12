@@ -262,11 +262,11 @@
     ];
   };
 
-  # Secondary filesystem that is just the jbods - script (WIP) will move files from fuse -> jbod_storage if they are not accessed in over ~24hrs
+  # Secondary filesystem that is just the jbods - script moves files from fuse -> jbod_storage if they are not accessed in over ~24hrs
   fileSystems."/mnt/jbod_storage" = {
     depends = [
       "/mnt/jbod/jbod1"
-#      "/mnt/jbod/jbod2"
+      "/mnt/jbod/jbod2"
     ];
     fsType = "fuse.mergerfs";
     device = "/mnt/jbod/*";
@@ -278,6 +278,27 @@
 #########
 # Backups / Replication
 #########
+
+  # SSD cache mover
+  systemd.timers.utility-mover-script = {
+    wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnCalendar = "02:00:00"; #2 AM
+        Unit = "utility-mover-script.service";
+      };
+
+      requires = [ "mnt-tank-fuse.mount" "mnt-jbod_storage.mount" ];
+  };
+
+  systemd.services.utility-mover-script = {
+    path = [ pkgs.rsync ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "/etc/nixos/sinet-infra/sinix/scripts/mover.sh";
+    };
+
+    requires = [ "mnt-tank-fuse.mount" "mnt-jbod_storage.mount" ];
+  };
 
   # Snapraid configuration
   services.snapraid = {
@@ -407,6 +428,20 @@
   services.prometheus.exporters.systemd = {
     enable = true;
     port = 9903;
+  };
+
+  # Prometheus restic exporter
+  services.prometheus.exporters.restic = {
+    enable = false;
+    port = 9904;
+    # Restic exporter doesn't support sftp.command so can't enable this yet
+    # https://github.com/ngosang/restic-exporter/issues/31
+    #extraOptions = [
+    #  "sftp.command='ssh remotebackup@terra.sinet.uk -i /etc/nixos/secrets/remotebackup-private-key -s sftp'"
+    #];
+    passwordFile = "/etc/nixos/secrets/restic-password";
+    repository = "sftp:remotebackup@terra.sinet.uk:/data/Backup/sinixbackups";
+    refreshInterval = 60*60; # Hourly
   };
 
   # Tailscale
