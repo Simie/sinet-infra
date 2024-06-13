@@ -40,6 +40,7 @@
   # Open ports in the firewall.
   networking.firewall = {
     enable = true;
+    allowPing = true;
     allowedTCPPorts = [ 
       80 443 # HTTP(S)
       #40000 # Discovery
@@ -365,7 +366,7 @@
         paths = [
           "/mnt/tank/appdata"
           "/mnt/tank/personal"
-          "/mnt/storage/personal"
+          "/mnt/storage/files"
         ];
         repository = "sftp:remotebackup@terra.sinet.uk:/data/Backup/sinixbackups";
         timerConfig = {
@@ -465,12 +466,9 @@
       workgroup = WORKGROUP
       server string = sinix
       netbios name = sinix
-      security = user
-      guest ok = yes
+      guest ok = no
       guest account = nobody
       map to guest = bad user
-      force user = dockerapp
-      force group = dockerapp
       load printers = no
       unix extensions = no
       hosts allow = 192.168.1. 127.0.0.1 localhost
@@ -478,24 +476,33 @@
     '';
     shares = {
       Public = {
-        path = "/data/Public";
-        browseable = "yes";
+        "path" = "/mnt/storage/public";
+        "browseable" = "yes";
         "read only" = "no";
         "guest ok" = "yes";
         "create mask" = "0666"; # Anyone can read/write, no execute.
         "directory mask" = "0777"; # Anyone can read/write/execute
       };
-      Personal = {
-        path = "/data/Personal";
-        browseable = "yes";
+
+      Documents = {
+        "path" = "/mnt/tank/personal";
+        "browseable" = "yes";
         "read only" = "no";
-        "guest ok" = "no";
         "create mask" = "0770"; # Only user/group can read/write/execute
         "directory mask" = "0770"; # Only user/group can read/write/execute
+
+        # Paperless manages these files so force all read/writes to go through the user paperless uses
+        "force user" = "dockerapp";
+        "force group" = "dockerapp";
+
         "valid users" = "simon"; # Only allow access to specific users (in this case, me)
-        "follow symlinks" = "yes";
-        "wide links" = "yes";
-        #"dfree command" = "/etc/nixos/sinet-infra/sinix/scripts/diskfreespace.sh"; # For some reason this gives an error when samba tries to call it.
+      };
+
+      Files = {
+        "path" = "/mnt/storage/files";
+        "browseable" = "yes";
+        "read only" = "no";
+        "valid users" = "simon"; # Only allow access to specific users (in this case, me)
       };
     };
   };
