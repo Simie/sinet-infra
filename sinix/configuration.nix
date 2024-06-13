@@ -271,7 +271,7 @@
     fsType = "fuse.mergerfs";
     device = "/mnt/jbod/*";
     options = [
-      "defaults" "nonempty" "allow_other" "use_ino" "cache.files=off" "moveonenospc=true" "dropcacheonclose=true" "minfreespace=200G" "category.create=mfs"
+      "defaults" "nonempty" "allow_other" "use_ino" "cache.files=off" "moveonenospc=true" "dropcacheonclose=true" "category.create=mfs"
     ];
   };
 
@@ -290,7 +290,7 @@
       ExecStart = "/etc/nixos/sinet-infra/sinix/scripts/mover.sh";
     };
 
-    requires = [ "mnt-tank-fuse.mount" "mnt-jbod_storage.mount" ];
+    requires = [ "mnt-tank-fuse.mount" "mnt-jbod_storage.mount" ]; # TODO swap to 'RequiresMountsFor'
   };
 
   # Snapraid configuration
@@ -451,7 +451,12 @@
 # Samba Shares
 ##########
 
-  services.samba-wsdd.enable = true; # make shares visible for windows 10 clients
+   # make shares visible for windows clients
+  services.samba-wsdd = {
+    enable = true;
+    openFirewall = true;
+  };
+
   services.samba = {
     enable = true;
     openFirewall = true;
@@ -490,6 +495,7 @@
         "valid users" = "simon"; # Only allow access to specific users (in this case, me)
         "follow symlinks" = "yes";
         "wide links" = "yes";
+        #"dfree command" = "/etc/nixos/sinet-infra/sinix/scripts/diskfreespace.sh"; # For some reason this gives an error when samba tries to call it.
       };
     };
   };
