@@ -11,3 +11,4 @@ dst=/mnt/jbod_storage
 
 find "$src/" -type f -atime +1 -print0 |
     rsync -iv --archive --remove-source-files --prune-empty-dirs --files-from - --from0 / "$dst"
+    

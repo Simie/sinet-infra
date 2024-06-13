@@ -280,18 +280,11 @@
 #########
 
   # SSD cache mover
-  systemd.timers.utility-mover-script = {
-    wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnCalendar = "02:00:00"; #2 AM
-        Unit = "utility-mover-script.service";
-      };
-
-      requires = [ "mnt-tank-fuse.mount" "mnt-jbod_storage.mount" ];
-  };
-
   systemd.services.utility-mover-script = {
     path = [ pkgs.rsync ];
+    startAt = "03:00:00";
+    after = [ "snapraid-sync.service" "snapraid-scrub.service" "restic-backups-remote-terra.service" ]; # Don't move files to the array while snapraid is busy
+    restartIfChanged = false; # Don't automatically start when doing nixos-rebuild.
     serviceConfig = {
       Type = "oneshot";
       ExecStart = "/etc/nixos/sinet-infra/sinix/scripts/mover.sh";
