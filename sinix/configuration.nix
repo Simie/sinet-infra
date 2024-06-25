@@ -256,7 +256,7 @@
       "/mnt/jbod/jbod2"
     ];
     fsType = "fuse.mergerfs";
-    device = "/mnt/tank/fuse:/mnt/jbod/*"; # fuse first, see below
+    device = "/mnt/tank/fuse:/mnt/jbod/jbod*"; # fuse first, see below
     options = [
       "defaults" "nonempty" "allow_other" "use_ino" "cache.files=off" "moveonenospc=true" "dropcacheonclose=true" "minfreespace=200G" 
       "category.create=ff" # ff = first found, so files are created on nvme storage first if there is space
@@ -270,7 +270,7 @@
       "/mnt/jbod/jbod2"
     ];
     fsType = "fuse.mergerfs";
-    device = "/mnt/jbod/*";
+    device = "/mnt/jbod/jbod*";
     options = [
       "defaults" "nonempty" "allow_other" "use_ino" "cache.files=off" "moveonenospc=true" "dropcacheonclose=true" "category.create=mfs"
     ];
