@@ -438,6 +438,13 @@
     refreshInterval = 60*60; # Hourly
   };
 
+  # Prometheus smartctl exporter
+  # Used by alert manager etc so I can tell when backup jobs fail
+  services.prometheus.exporters.smartctl = {
+    enable = true;
+    port = 9905;
+  };
+
   # Tailscale
   services.tailscale = {
     enable = true;
