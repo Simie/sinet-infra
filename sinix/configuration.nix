@@ -43,12 +43,14 @@
     allowPing = true;
     allowedTCPPorts = [ 
       80 443 # HTTP(S)
+      53 # DNS
       #40000 # Discovery
       1400 # SONOS -> HASS
       1883 # MQTT
       548 # Netatalk (time machine backup)
     ];
     allowedUDPPorts = [
+      53 # DNS
       #1900 1901 137 136 138 # HASS
     ];
     trustedInterfaces = [ "veth_traefik" ];
@@ -583,6 +585,17 @@
     requires = ["docker.service"];
   };
 
+  systemd.services.stack-network = {
+    wantedBy = ["multi-user.target"];
+
+    path = [ pkgs.docker-compose ];
+    preStart = "/etc/nixos/sinet-infra/sinix/services/service-compose network down";
+    script = "/etc/nixos/sinet-infra/sinix/services/service-compose network up";
+    postStop = "/etc/nixos//sinet-infra/sinix/services/service-compose network down";
+
+    requires = ["docker.service"];
+  };
+
   systemd.services.stack-telemetry = {
     wantedBy = ["multi-user.target"];
 
@@ -592,7 +605,7 @@
     postStop = "/etc/nixos//sinet-infra/sinix/services/service-compose telemetry down";
 
     after = [ "stack-infra.service" ];
-    requires = [ "stack-infra.service" ];
+    requires = ["docker.service"];
   };
 
   systemd.services.stack-homeassist = {
@@ -604,7 +617,7 @@
     postStop = "/etc/nixos/sinet-infra/sinix/services/service-compose homeassist down";
 
     after = [ "stack-infra.service" ];
-    requires = [ "stack-infra.service" ];
+    requires = ["docker.service"];
   };
 
   systemd.services.stack-media = {
@@ -616,7 +629,7 @@
     postStop = "/etc/nixos/sinet-infra/sinix/services/service-compose media down";
 
     after = [ "stack-infra.service" "mnt-storage.mount" ];
-    requires = [ "stack-infra.service" "mnt-storage.mount" ];
+    requires = [ "mnt-storage.mount" "docker.service" ];
   };
 
 ##########
