@@ -1,0 +1,11 @@
+
+
+Useful container for debugging docker networking crap:
+
+  paperless-test:
+    image: jonlabelle/network-tools
+    networks:
+      - traefik
+      - internal
+    extra_hosts:
+      - "auth.${SI_DOMAIN}:172.101.1.2" # traefik proxy
