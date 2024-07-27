@@ -48,10 +48,12 @@
       1400 # SONOS -> HASS
       1883 # MQTT
       548 # Netatalk (time machine backup)
+      8080 6789 8843 8880 6789 # Unifi
     ];
     allowedUDPPorts = [
       53 # DNS
       #1900 1901 137 136 138 # HASS
+      1900 3478 5514 10001 # Unifi
     ];
     trustedInterfaces = [ "veth_traefik" ];
     logRefusedConnections = true;

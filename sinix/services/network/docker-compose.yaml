@@ -6,6 +6,10 @@ networks:
     name: traefik
     external: true 
 
+  internal: 
+    driver: bridge
+    internal: true 
+
 services:
 
 ###
@@ -53,6 +57,7 @@ services:
       # - DNS_SERVER_FORWARDERS=1.1.1.1, 8.8.8.8 #Comma separated list of forwarder addresses.
       # - DNS_SERVER_FORWARDER_PROTOCOL=Tcp #Forwarder protocol options: Udp, Tcp, Tls, Https, HttpsJson.
       # - DNS_SERVER_LOG_USING_LOCAL_TIME=true #Enable this option to use local time instead of UTC for logging.
+    env_file: settings.env
     volumes:
       - "$SI_DOCKERDIR/stack-network/dns/config:/etc/dns"
     restart: unless-stopped
@@ -67,12 +72,84 @@ services:
       - "traefik.http.routers.dns-websecure.rule=Host(`${DNS_HOST}`)"
       - "traefik.http.routers.dns-websecure.tls=true"
       - "traefik.http.routers.dns-websecure.tls.certresolver=sinetresolver"
+      - "traefik.http.routers.dns-websecure.entrypoints=websecure"
       - "traefik.http.services.dns-websecure.loadBalancer.server.port=5380"
-      ## Middlewares
-      - "traefik.http.routers.dns-websecure.middlewares=authentik"
 
 ###
 ## Unifi Controller
 ###
 
 # TODO
+
+  unifi-db:
+    image: docker.io/mongo:7.0-jammy
+    container_name: unifi-db
+    networks:
+      - internal
+    env_file: settings.env
+    volumes:
+      - "$SI_DOCKERDIR/stack-network/unifi/db:/data/db"
+      - ./scripts/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    restart: unless-stopped
+
+  # mongo-express:
+  #   image: mongo-express
+  #   restart: always
+  #   ports:
+  #     - 8081:8081
+  #   networks:
+  #     - internal
+  #     - default
+  #     - traefik
+  #   environment:
+  #     ME_CONFIG_MONGODB_ADMINUSERNAME: unifi
+  #     ME_CONFIG_MONGODB_ADMINPASSWORD: unifi
+  #     ME_CONFIG_MONGODB_URL: mongodb://unifi:unifi@unifi-db:27017/
+  #     ME_CONFIG_BASICAUTH: false
+
+  unifi-network-application:
+    image: lscr.io/linuxserver/unifi-network-application:latest
+    container_name: unifi-network-application
+    networks:
+      - internal
+      - default
+      - traefik
+    depends_on:
+      - unifi-db
+    env_file: settings.env
+    environment:
+      - PUID=${SI_DOCKER_APP_USER}
+      - PGID=${SI_DOCKER_APP_GROUP}
+      - MEM_LIMIT=1024
+      - MEM_STARTUP=1024
+    volumes:
+      - "$SI_DOCKERDIR/stack-network/unifi/config:/config"
+    ports:
+      #- 8443:8443 # Web UI
+      - 3478:3478/udp # STUN port
+      - 10001:10001/udp # Required for AP discovery
+      - 8080:8080 # device communication
+      - 6789:6789 # Mobile throughput test
+      #- 1900:1900/udp
+      - 8843:8843
+      - 8880:8880
+      - 6789:6789
+      - 5514:5514/udp
+    restart: unless-stopped
+    labels:
+      - "logging=promtail"
+      - "logging_jobname=unifi"
+
+      - "traefik.enable=true"
+      ## HTTPS Routers
+      - "traefik.http.routers.unifi-websecure.rule=Host(`unifi-staging.${SI_DOMAIN}`)"
+      - "traefik.http.routers.unifi-websecure.tls=true"
+      - "traefik.http.routers.unifi-websecure.tls.certresolver=sinetresolver"
+      - "traefik.http.routers.unifi-websecure.entrypoints=websecure"
+
+      # Can't seem to make this work- it can never find the transport (whether in file config or label config)
+      # For now just put insecureSkipVerify traefik static config.
+      #- "traefik.http.serversTransports.ignorecerttransport.insecureSkipVerify=true"
+      #- "traefik.http.services.unifi-websecure.loadbalancer.serverstransport=ignorecerttransport"
+      - "traefik.http.services.unifi-websecure.loadbalancer.server.scheme=https"
+      - "traefik.http.services.unifi-websecure.loadBalancer.server.port=8443"

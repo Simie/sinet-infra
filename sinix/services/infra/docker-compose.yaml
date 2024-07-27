@@ -1,5 +1,3 @@
-version: "3.3"
-
 networks:
   traefik_host:
     name: a_host_bridge # a_ prefix makes it alphabetically first, so it's used for routing to the host before any other networks.
@@ -44,19 +42,6 @@ services:
     env_file: 
       - settings.env
     restart: on-failure
-    command:
-      #- "--log.level=DEBUG"
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entryPoints.web.address=:80"
-      - "--entryPoints.websecure.address=:443"
-      - "--providers.docker.network=traefik" # Otherwise it sometimes tries to use internal network to talk to host, which breaks firewall allowing access to host from this containers fixed ip
-
-      - "--certificatesresolvers.sinetresolver.acme.dnschallenge=true"
-      - "--certificatesresolvers.sinetresolver.acme.dnschallenge.provider=cloudflare"
-      - "--certificatesresolvers.sinetresolver.acme.email=me@simonmoles.com"
-      - "--certificatesresolvers.sinetresolver.acme.storage=/letsencrypt/acme.json"
     labels:
       - "traefik.enable=true"
 
@@ -68,15 +53,22 @@ services:
       - "traefik.http.routers.default_http.entrypoints=web"
       - "traefik.http.routers.default_http.middlewares=https_redirect"
       - "traefik.http.routers.default_http.priority=1" # Set priority as low as possible so doesn't take precedence over individual container-defined http routes
+
+      - "traefik.http.routers.traefik-api.rule=Host(`sinix.${SI_DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/dashboard`))"
+      - "traefik-http.routers.traefik-api.entrypoints=websecure"
+      - "traefik.http.routers.traefik-api.service=api@internal"
+      - "traefik.http.routers.traefik-api.tls=true"
+      - "traefik.http.routers.traefik-api.tls.certresolver=sinetresolver"
+
       - "logging=promtail"
       - "logging_jobname=traefik"
     ports:
       - "80:80"
       - "443:443"
-      - "8080:8080"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "$SI_DOCKERDIR/stack-infra/traefik/letsencrypt:/letsencrypt"
+      - "./config/traefik.yaml:/etc/traefik/traefik.yaml:ro"
 
 ###
 ## DB Services for authentik
@@ -158,6 +150,8 @@ services:
       #- "traefik.http.middlewares.authentik.forwardauth.authResponseHeadersRegex=^X-authentik-"
       ## Allow embedding in frame on trusted domain (e.g. home assistant dashboards)
       - "traefik.http.middlewares.allow-framing.headers.customresponseheaders.Content-Security-Policy=frame-ancestors 'self' https://$SI_DOMAIN https://*.$SI_DOMAIN"
+      - "traefik.http.middlewares.allow-framing.headers.customresponseheaders.Permissions-Policy=publickey-credentials-get=(self https://$SI_DOMAIN https://*.$SI_DOMAIN)"
+
       ## Logging
       - "logging=promtail"
       - "logging_jobname=authentik_server"

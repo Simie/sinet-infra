@@ -1,0 +1,34 @@
+api:
+  dashboard: true
+
+entryPoints:
+  web:
+    address: :80
+  websecure:
+    address: :443
+
+providers:
+  docker:
+    exposedByDefault: false
+     # Set network explictly, otherwise it sometimes tries to use internal network to talk to host, which breaks firewall allowing access to host from this containers fixed ip
+    network: traefik
+
+certificatesResolvers:
+  sinetresolver:
+    acme:
+      email: me@simonmoles.com
+      storage: /letsencrypt/acme.json
+      dnschallenge:
+        provider: cloudflare
+
+# Been faffing around for an hour trying to make traefik pick up 
+# the serversTransport defined in this file with verify disabled.
+# Can't be arsed to try any more so just disable cert verification,
+# it shouldn't matter as I'm only reverse proxying trusted services.
+serversTransport:
+  insecureSkipVerify: true
+
+#http:
+#  serversTransports:
+#    ignoreCertTransport:
+#      insecureSkipVerify: true
