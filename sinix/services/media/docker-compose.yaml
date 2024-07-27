@@ -1,0 +1,263 @@
+networks:
+  traefik:
+    name: traefik
+    external: true
+  default:
+    driver: bridge
+  internal:
+    driver: bridge
+    internal: true # No internet access
+
+services:
+
+  ## Jellyfin media server
+  jellyfin:
+    image: jellyfin/jellyfin
+    container_name: jellyfin
+    hostname: jellyfin
+    user: $SI_DOCKER_APP_USER:$SI_DOCKER_APP_GROUP
+    group_add: # by id as these may not exist within the container. Needed to provide permissions to the VAAPI Devices
+      - '303' #render
+      - '26' # video
+    networks:
+      - traefik
+      - default
+    volumes:
+      - $SI_DOCKERDIR/stack-media/jellyfin/config:/config
+      - $SI_STORAGEDIR/cache/jellyfin:/cache
+      - $SI_STORAGEDIR/media:/media
+    restart: unless-stopped
+    devices:
+      # VAAPI Devices
+      - /dev/dri/card1:/dev/dri/card1
+      - /dev/dri/renderD128:/dev/dri/renderD128
+      #- /dev/dri:/dev/dri
+    env_file:
+      - settings.env
+    labels:
+      - "logging=promtail"
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.jellyfin-websecure.entryPoints=websecure'
+      - 'traefik.http.routers.jellyfin-websecure.rule=Host(`jellyfin.${SI_DOMAIN}`)'
+      - "traefik.http.routers.jellyfin-websecure.tls=true"
+      - "traefik.http.routers.jellyfin-websecure.tls.certresolver=sinetresolver"
+      ## Middleware
+      - 'traefik.http.routers.jellyfin-websecure.middlewares=jellyfin-mw'
+      - 'traefik.http.middlewares.jellyfin-mw.headers.customResponseHeaders.X-Robots-Tag=noindex,nofollow,nosnippet,noarchive,notranslate,noimageindex'
+      - 'traefik.http.middlewares.jellyfin-mw.headers.SSLRedirect=true'
+      - 'traefik.http.middlewares.jellyfin-mw.headers.SSLHost=jellyfin.${SI_DOMAIN}'
+      - 'traefik.http.middlewares.jellyfin-mw.headers.SSLForceHost=true'
+      - 'traefik.http.middlewares.jellyfin-mw.headers.STSSeconds=315360000'
+      - 'traefik.http.middlewares.jellyfin-mw.headers.STSIncludeSubdomains=true'
+      - 'traefik.http.middlewares.jellyfin-mw.headers.STSPreload=true'
+      - 'traefik.http.middlewares.jellyfin-mw.headers.forceSTSHeader=true'
+      - 'traefik.http.middlewares.jellyfin-mw.headers.frameDeny=true'
+      - 'traefik.http.middlewares.jellyfin-mw.headers.contentTypeNosniff=true'
+      - 'traefik.http.middlewares.jellyfin-mw.headers.customresponseheaders.X-XSS-PROTECTION=1'
+      - "traefik.http.middlewares.jellyfin-mw.headers.customFrameOptionsValue='allow-from https://${SI_DOMAIN}'"
+      ## HTTP Service
+      # We define the port here as a port is required, but note that the service is pointing to the service defined in @file
+      - 'traefik.http.services.jellyfin-websecure.loadBalancer.server.port=8096'
+      - 'traefik.http.services.jellyfin-websecure.loadBalancer.passHostHeader=true'
+
+  ## VPN
+  gluetun:
+    container_name: gluetun
+    image: qmcgaw/gluetun
+    hostname: gluetun
+    networks:
+      - traefik # So containers using this container as a network service can have traefik access them
+      - default # For internet access
+      - internal
+    cap_add:
+      - NET_ADMIN
+    env_file: 
+      - settings.env
+
+  ## DHT Tracker
+  bitmagnet:
+    image: ghcr.io/bitmagnet-io/bitmagnet:latest
+    container_name: bitmagnet
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    #ports:
+      # API and WebUI port:
+      #- "3333:3333"
+      # BitTorrent ports:
+      #- "3334:3334/tcp"
+      #- "3334:3334/udp"
+    restart: unless-stopped
+    environment:
+      - POSTGRES_HOST=gluetun # network_mode means postgress container shares gluetuns hostname.
+      - POSTGRES_PASSWORD=postgres
+    env_file: 
+      - settings.env
+    command:
+      - worker
+      - run
+      - --keys=http_server
+      - --keys=queue_server
+      # disable the next line to run without DHT crawler
+      - --keys=dht_crawler
+    labels:
+      - "logging=promtail"
+      - "traefik.enable=true"
+      ## HTTPS Routers
+      - "traefik.http.routers.bitmagnet-websecure.entrypoints=websecure"
+      - "traefik.http.routers.bitmagnet-websecure.rule=Host(`bitmagnet.${SI_DOMAIN}`)"
+      - "traefik.http.routers.bitmagnet-websecure.tls=true"
+      - "traefik.http.routers.bitmagnet-websecure.tls.certresolver=sinetresolver"
+      - "traefik.http.services.bitmagnet-websecure.loadbalancer.server.port=3333"
+
+  ## DB for bitmagnet
+  postgres:
+    image: postgres:16-alpine
+    network_mode: "service:gluetun"
+    #hostname: bitmagnet-postgres
+    #networks:
+    #  - internal
+    volumes:
+      - $SI_DOCKERDIR/stack-media/bitmagnet/postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=bitmagnet
+      - PGUSER=postgres
+    shm_size: 1g
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready
+      start_period: 20s
+      interval: 10s
+
+  ## Download Client
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    network_mode: "service:gluetun"
+    depends_on:
+        gluetun:
+          condition: service_healthy
+    env_file:
+      - settings.env
+    environment:
+      - PUID=$SI_DOCKER_APP_USER
+      - PGID=$SI_DOCKER_APP_GROUP
+      - WEBUI_PORT=8080
+      - TORRENTING_PORT=6881
+    volumes:
+      - $SI_DOCKERDIR/stack-media/qbittorrent/config:/config
+      - $SI_STORAGEDIR/downloads:/downloads
+    #ports:
+    #  - 8080:8080
+    #  - 6881:6881
+    #  - 6881:6881/udp
+    restart: unless-stopped
+    labels:
+      - "logging=promtail"
+      - "traefik.enable=true"
+      ## HTTPS Routers
+      - "traefik.http.routers.qbittorrent-websecure.entrypoints=websecure"
+      - "traefik.http.routers.qbittorrent-websecure.rule=Host(`qbittorrent.${SI_DOMAIN}`)"
+      - "traefik.http.routers.qbittorrent-websecure.tls=true"
+      - "traefik.http.routers.qbittorrent-websecure.tls.certresolver=sinetresolver"
+      - "traefik.http.services.qbittorrent-websecure.loadbalancer.server.port=8080"
+      ## Middlewares
+      - "traefik.http.middlewares.qb-headers.headers.customrequestheaders.X-Frame-Options=SAMEORIGIN"
+      - "traefik.http.middlewares.qb-headers.headers.customrequestheaders.Referer="
+      - "traefik.http.middlewares.qb-headers.headers.customrequestheaders.Origin="
+      - "traefik.http.routers.qbittorrent-websecure.middlewares=authentik,qb-headers"
+
+## Servarr
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    restart: unless-stopped
+    container_name: prowlarr
+    network_mode: "service:gluetun"
+    depends_on:
+        gluetun:
+          condition: service_healthy
+    environment:
+      - PUID=$SI_DOCKER_APP_USER
+      - PGID=$SI_DOCKER_APP_GROUP
+    env_file:
+      - settings.env
+    volumes:
+      - $SI_DOCKERDIR/stack-media/prowlarr/config:/config
+    #ports:
+    #  - 9696:9696
+    labels:
+      - 'logging=promtail'
+      - 'traefik.enable=true'
+      # HTTPS
+      - 'traefik.http.routers.prowlarr-websecure.entryPoints=websecure'
+      - 'traefik.http.routers.prowlarr-websecure.rule=Host(`prowlarr.${SI_DOMAIN}`)'
+      - "traefik.http.routers.prowlarr-websecure.tls=true"
+      - "traefik.http.routers.prowlarr-websecure.tls.certresolver=sinetresolver"
+      - 'traefik.http.services.prowlarr-websecure.loadBalancer.server.port=9696'
+      ## Middlewares
+      - "traefik.http.routers.prowlarr-websecure.middlewares=authentik"
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    restart: unless-stopped
+    container_name: sonarr
+    network_mode: "service:gluetun"
+    depends_on:
+        gluetun:
+          condition: service_healthy
+    environment:
+      - PUID=$SI_DOCKER_APP_USER
+      - PGID=$SI_DOCKER_APP_GROUP
+    env_file:
+      - settings.env
+    volumes:
+      - $SI_DOCKERDIR/stack-media/sonarr/config:/config
+      - $SI_STORAGEDIR/media:/data
+      - $SI_STORAGEDIR/downloads:/downloads
+    labels:
+      - 'logging=promtail'
+      - 'traefik.enable=true'
+      # HTTPS
+      - 'traefik.http.routers.sonarr-websecure.entryPoints=websecure'
+      - 'traefik.http.routers.sonarr-websecure.rule=Host(`sonarr.${SI_DOMAIN}`)'
+      - "traefik.http.routers.sonarr-websecure.tls=true"
+      - "traefik.http.routers.sonarr-websecure.tls.certresolver=sinetresolver"
+      - 'traefik.http.services.sonarr-websecure.loadBalancer.server.port=8989'
+      ## Middlewares
+      - "traefik.http.routers.sonarr-websecure.middlewares=authentik"
+
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    network_mode: "service:gluetun"
+    depends_on:
+        gluetun:
+          condition: service_healthy
+    environment:
+      - PUID=$SI_DOCKER_APP_USER
+      - PGID=$SI_DOCKER_APP_GROUP
+    env_file:
+      - settings.env
+    volumes:
+      - $SI_DOCKERDIR/stack-media/radarr/config:/config
+      - $SI_STORAGEDIR/media:/data
+      - $SI_STORAGEDIR/downloads:/downloads
+    restart: unless-stopped
+    labels:
+      - 'logging=promtail'
+      - 'traefik.enable=true'
+      # HTTPS
+      - 'traefik.http.routers.radarr-websecure.entryPoints=websecure'
+      - 'traefik.http.routers.radarr-websecure.rule=Host(`radarr.${SI_DOMAIN}`)'
+      - "traefik.http.routers.radarr-websecure.tls=true"
+      - "traefik.http.routers.radarr-websecure.tls.certresolver=sinetresolver"
+      - 'traefik.http.services.radarr-websecure.loadBalancer.server.port=7878'
+      ## Middlewares
+      - "traefik.http.routers.radarr-websecure.middlewares=authentik"

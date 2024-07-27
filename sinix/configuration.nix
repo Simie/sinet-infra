@@ -169,6 +169,13 @@
     wget
   ];
 
+  hardware.opengl = {
+    enable = true;
+    extraPackages = with pkgs; [
+      intel-media-sdk
+    ];
+  };
+
 ##########
 # File Systems
 ##########
@@ -267,7 +274,7 @@
     fsType = "fuse.mergerfs";
     device = "/mnt/tank/fuse:/mnt/jbod/jbod*"; # fuse first, see below
     options = [
-      "defaults" "nonempty" "allow_other" "use_ino" "cache.files=off" "moveonenospc=true" "dropcacheonclose=true" "minfreespace=200G" 
+      "defaults" "nonempty" "allow_other" "use_ino" "cache.files=partial" "moveonenospc=true" "dropcacheonclose=true" "minfreespace=200G" 
       "category.create=ff" # ff = first found, so files are created on nvme storage first if there is space
     ];
   };
@@ -281,7 +288,7 @@
     fsType = "fuse.mergerfs";
     device = "/mnt/jbod/jbod*";
     options = [
-      "defaults" "nonempty" "allow_other" "use_ino" "cache.files=off" "moveonenospc=true" "dropcacheonclose=true" "category.create=mfs"
+      "defaults" "nonempty" "allow_other" "use_ino" "cache.files=partial" "moveonenospc=true" "dropcacheonclose=true" "category.create=mfs"
     ];
   };
 
@@ -448,7 +455,6 @@
   };
 
   # Prometheus smartctl exporter
-  # Used by alert manager etc so I can tell when backup jobs fail
   services.prometheus.exporters.smartctl = {
     enable = true;
     port = 9905;
@@ -574,6 +580,7 @@
     };
 
     after = ["docker.service"];
+    requires = ["docker.service"];
   };
 
   systemd.services.stack-telemetry = {
@@ -585,6 +592,7 @@
     postStop = "/etc/nixos//sinet-infra/sinix/services/service-compose telemetry down";
 
     after = [ "stack-infra.service" ];
+    requires = [ "stack-infra.service" ];
   };
 
   systemd.services.stack-homeassist = {
@@ -596,6 +604,19 @@
     postStop = "/etc/nixos/sinet-infra/sinix/services/service-compose homeassist down";
 
     after = [ "stack-infra.service" ];
+    requires = [ "stack-infra.service" ];
+  };
+
+  systemd.services.stack-media = {
+    wantedBy = ["multi-user.target"];
+
+    path = [ pkgs.docker-compose ];
+    preStart = "/etc/nixos/sinet-infra/sinix/services/service-compose media down";
+    script = "/etc/nixos/sinet-infra/sinix/services/service-compose media up";
+    postStop = "/etc/nixos/sinet-infra/sinix/services/service-compose media down";
+
+    after = [ "stack-infra.service" "mnt-storage.mount" ];
+    requires = [ "stack-infra.service" "mnt-storage.mount" ];
   };
 
 ##########
