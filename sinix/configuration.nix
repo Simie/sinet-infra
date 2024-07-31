@@ -186,20 +186,20 @@
 
   # Boot + Root + Swap File Systems
   fileSystems."/" =
-    { device = "/dev/disk/by-uuid/c36952a3-c415-4ca0-89c6-aa290630c23f";
+    { device = "/dev/disk/by-label/nixos";
       fsType = "ext4";
     };
 
   fileSystems."/boot" =
-    { device = "/dev/disk/by-uuid/A9A2-6DD1";
+    { device = "/dev/disk/by-label/boot";
       fsType = "vfat";
       options = [ "fmask=0077" "dmask=0077" ];
     };
 
-  boot.kernel.sysctl = { "vm.swappiness" = 10;}; # Prefer not to use swap - it's here for safety but it's on usb flash so don't want it used unless necessary.
   swapDevices = [ {
-    device = "/dev/disk/by-partlabel/swap";
-    }];
+    device = "/swapfile";
+    size = 15625; # ~16GB
+  }];
 
   # Data Storage File Systems
   
