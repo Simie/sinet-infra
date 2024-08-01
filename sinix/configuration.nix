@@ -246,24 +246,38 @@
   #   ${pkgs.hd-idle}/sbin/hd-idle -a sda   -l --set SCT=6000 --set STANDBY=1 /dev/disk/by-label/jbod* 
   #''; #${pkgs.hdparm}/sbin/hdparm -S 1 
 
-  # 6TB Seagate Ironwolf
+  # 10TB Seagate enterprise
   fileSystems."/mnt/jbod/parity1" = 
   {
-    device = "/dev/disk/by-label/parity1";
+    device = "/dev/disk/by-partlabel/parity1";
+    fsType = "ext4";
+  };
+
+  # 10TB Seagate enterprise
+  fileSystems."/mnt/jbod/parity2" = 
+  {
+    device = "/dev/disk/by-partlabel/parity2";
     fsType = "ext4";
   };
   
   # 3TB WD RED
   fileSystems."/mnt/jbod/jbod1" = 
   {
-    device = "/dev/disk/by-label/jbod1";
+    device = "/dev/disk/by-partlabel/jbod1";
     fsType = "ext4";
   };
   
-  # 3TB WD RED
-  fileSystems."/mnt/jbod/jbod2" = 
+  # 3TB WD RED - FAULTY??
+  #fileSystems."/mnt/jbod_staging/jbod2" = 
+  #{
+  #  device = "/dev/disk/by-partlabel/jbod2";
+  #  fsType = "ext4";
+  #};
+  
+  # 6TB Seagate Ironwolf
+  fileSystems."/mnt/jbod/jbod3" = 
   {
-    device = "/dev/disk/by-label/jbod2";
+    device = "/dev/disk/by-partlabel/jbod3";
     fsType = "ext4";
   };
 
@@ -287,7 +301,7 @@
   fileSystems."/mnt/jbod_storage" = {
     depends = [
       "/mnt/jbod/jbod1"
-      "/mnt/jbod/jbod2"
+      "/mnt/jbod/jbod3"
     ];
     fsType = "fuse.mergerfs";
     device = "/mnt/jbod/jbod*";
@@ -320,16 +334,18 @@
     
     parityFiles = [
       "/mnt/jbod/parity1/snapraid.parity"
+      "/mnt/jbod/parity2/snapraid.2-parity"
     ];
 
     dataDisks = {
       d1 = "/mnt/jbod/jbod1";
-      d2 = "/mnt/jbod/jbod2";
+      d2 = "/mnt/jbod/jbod3";
     };
 
     contentFiles = [
+      "/var/snapraid.content"
       "/mnt/jbod/jbod1/snapraid.content"
-      "/mnt/jbod/jbod2/snapraid.content"
+      "/mnt/jbod/jbod3/snapraid.content"
     ];
 
     exclude = [
