@@ -404,6 +404,9 @@
           "/mnt/tank/personal"
           "/mnt/storage/files"
         ];
+        exclude = [
+          ".recycle"
+        ];
         repository = "sftp:remotebackup@terra.sinet.uk:/data/Backup/sinixbackups";
         timerConfig = {
           OnCalendar = "04:30";
@@ -529,7 +532,7 @@
       Documents = {
         "path" = "/mnt/tank/personal";
         "browseable" = "yes";
-        "read only" = "no";
+        "read only" = "yes"; # Managed via paperless
         "create mask" = "0770"; # Only user/group can read/write/execute
         "directory mask" = "0770"; # Only user/group can read/write/execute
 
@@ -541,6 +544,15 @@
       };
 
       Files = {
+        "vfs object" = "recycle";
+
+        "recycle:repository" = ".recycle";
+        "recycle:keeptree" = "yes";
+        "recycle:versions" = "yes";
+        "recycle:touch" = "yes";
+        "recylce:exclude_dir" = "/tmp /TMP /temp /TEMP /public /cache /CACHE";
+        "recycle:exclude" = "*.TMP *.tmp *.temp ~$* *.log *.bak";
+
         "path" = "/mnt/storage/files";
         "browseable" = "yes";
         "read only" = "no";
@@ -551,6 +563,18 @@
 
   # Make samba depend on storage mount being up
   systemd.targets.samba.requires = ["mnt-storage.mount"];
+
+  # Cleanup recycle folder
+  systemd.services.cleanup-recycle-bin = {
+    startAt = "01:00:00";
+    restartIfChanged = false; # Don't automatically start when doing nixos-rebuild.
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "/etc/nixos/sinet-infra/sinix/scripts/cleanup-recycle-bin.sh";
+    };
+
+    requires = [ "mnt-storage.mount" ];
+  };
 
 ##########
 # Time machine backup
