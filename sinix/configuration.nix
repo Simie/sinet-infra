@@ -549,6 +549,9 @@
     };
   };
 
+  # Make samba depend on storage mount being up
+  systemd.targets.samba.requires = ["mnt-storage.mount"];
+
 ##########
 # Time machine backup
 ##########
@@ -568,6 +571,9 @@
       };
     };
   };
+  
+  # Make netatalk depend on storage mount being up
+  systemd.services.netatalk.requires = ["mnt-storage.mount"];
 
   services.avahi = {
     enable = true;
