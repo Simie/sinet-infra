@@ -507,7 +507,7 @@
     extraConfig = ''
       workgroup = WORKGROUP
       server string = sinix
-      netbios name = sinix
+      netbios name = sinix.sinet.uk
       guest ok = no
       guest account = nobody
       map to guest = bad user
@@ -561,7 +561,7 @@
     port = 548; # Default, opened in firewall in networking section
     settings = {
       Global = {
-        "mimic model" = "TimeCapsule6,106";  # show the icon for the first gen TC
+        "mimic model" = "TimeCapsule8,119";
       };
       time-machine = {
           path = "/mnt/storage/backups/time-machine";
