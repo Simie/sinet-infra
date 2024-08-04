@@ -29,22 +29,22 @@ scrape_configs:
   # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
 
   - job_name: 'prometheus'
-    scrape_interval: 15s
+    scrape_interval: 30s
     static_configs:
          - targets: ['localhost:9090']
 
   - job_name: 'cadvisor'
-    scrape_interval: 15s
+    scrape_interval: 1m
     static_configs:
       - targets: ['cadvisor:8080']
 
   - job_name: 'node-exporter'
-    scrape_interval: 15s
+    scrape_interval: 1m
     static_configs:
       - targets: ['host.docker.internal:9901']
 
   - job_name: 'systemd-exporter'
-    scrape_interval: 15s
+    scrape_interval: 1m
     static_configs:
       - targets: ['host.docker.internal:9903']
 
@@ -70,7 +70,7 @@ scrape_configs:
         replacement: ${1}
 
   - job_name: 'home-assistant'
-    scrape_interval: 15s
+    scrape_interval: 1m
     metrics_path: /api/prometheus
     authorization:
       type: 'Bearer'
