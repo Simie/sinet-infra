@@ -1,0 +1,110 @@
+networks:
+  traefik:
+    name: traefik
+    external: true
+  internal:
+    name: z_paperless_internal # Alphabetically last so traefik network is preferred
+    driver: bridge
+    internal: true # No internet access
+
+services:
+
+  paperless-redis:
+    image: docker.io/library/redis:7
+    restart: unless-stopped
+    networks:
+      - internal
+    user: "${SI_DOCKER_APP_USER}:${SI_DOCKER_APP_GROUP}"
+    volumes:
+      - $SI_DOCKERDIR/paperless/redis-data:/data
+
+  paperless-postgres:
+    image: docker.io/library/postgres:16
+    restart: unless-stopped
+    networks: 
+      - internal
+    volumes:
+      - $SI_DOCKERDIR/paperless/postgres-data:/var/lib/postgresql/data
+    user: "${SI_DOCKER_APP_USER}:${SI_DOCKER_APP_GROUP}"
+    environment:
+      POSTGRES_DB: paperless
+      POSTGRES_USER: paperless
+      POSTGRES_PASSWORD: paperless
+
+  paperless:
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    restart: on-failure
+    depends_on:
+      - paperless-postgres
+      - paperless-redis
+      - paperless-gotenberg
+      - paperless-tika
+    networks:
+      - traefik
+      - internal
+    extra_hosts:
+      - "auth.${SI_DOMAIN}:172.101.1.2" # traefik proxy, to allow access to openid auth
+    volumes:
+      - $SI_DOCKERDIR/paperless/paperless-data:/usr/src/paperless/data
+      - /mnt/tank/personal/Media:/usr/src/paperless/media
+      #- /data/Personal/Documents/Store:/usr/src/paperless/export
+      - /mnt/tank/personal/Ingest:/usr/src/paperless/consume
+    env_file: settings.env
+    environment:
+      USERMAP_UID: ${SI_DOCKER_APP_USER}
+      USERMAP_GID: ${SI_DOCKER_APP_GROUP}
+      PAPERLESS_URL: https://paperless.${SI_DOMAIN}
+      PAPERLESS_REDIS: redis://paperless-redis:6379
+      PAPERLESS_DBHOST: paperless-postgres
+      PAPERLESS_TIKA_ENABLED: 1
+      PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://paperless-gotenberg:3000
+      PAPERLESS_TIKA_ENDPOINT: http://paperless-tika:9998
+      PAPERLESS_APPS: allauth.socialaccount.providers.openid_connect
+      PAPERLESS_FILENAME_DATE_ORDER: YMD # Enable checking filename for dates if they have them (not really needed for new docs, but existing document storage solution had this layout)
+      PAPERLESS_FILENAME_FORMAT: "{created_year}/{created_year}-{created_month}-{created_day} {title}"
+      PAPERLESS_DISABLE_REGULAR_LOGIN: true
+      PAPERLESS_CONSUMER_RECURSIVE: true
+      PAPERLESS_SOCIALACCOUNT_PROVIDERS: >
+          {
+            "openid_connect": {
+              "APPS": [
+                {
+                  "provider_id": "authentik",
+                  "name": "Authentik",
+                  "client_id": "${PAPERLESS_OPENID_CLIENTID}",
+                  "secret": "${PAPERLESS_OPENID_CLIENTSECRET}",
+                  "settings": {
+                    "server_url": "${SI_OPENID_DOMAIN}/application/o/paperless-ngx/.well-known/openid-configuration"
+                  }
+                }
+              ],
+              "OAUTH_PKCE_ENABLED": "True"
+            }
+          }
+    labels:
+      - "logging=promtail"
+      - "traefik.enable=true"
+      ## HTTPS Routers
+      - "traefik.http.routers.paperless-websecure.entrypoints=websecure"
+      - "traefik.http.routers.paperless-websecure.rule=Host(`paperless.${SI_DOMAIN}`)"
+      - "traefik.http.routers.paperless-websecure.tls=true"
+      - "traefik.http.routers.paperless-websecure.tls.certresolver=sinetresolver"
+      - "traefik.http.services.paperless-websecure.loadbalancer.server.port=8000"
+
+  paperless-gotenberg:
+    image: docker.io/gotenberg/gotenberg:7.10
+    restart: unless-stopped
+    networks: 
+      - internal
+    # The gotenberg chromium route is used to convert .eml files. We do not
+    # want to allow external content like tracking pixels or even javascript.
+    command:
+      - "gotenberg"
+      - "--chromium-disable-javascript=true"
+      - "--chromium-allow-list=file:///tmp/.*"
+
+  paperless-tika:
+    image: docker.io/apache/tika:latest
+    restart: unless-stopped
+    networks: 
+      - internal

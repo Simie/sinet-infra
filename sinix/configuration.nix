@@ -680,6 +680,18 @@
     requires = [ "mnt-storage.mount" "docker.service" ];
   };
 
+  systemd.services.stack-apps = {
+    wantedBy = ["multi-user.target"];
+
+    path = [ pkgs.docker-compose ];
+    preStart = "/etc/nixos/sinet-infra/sinix/services/service-compose apps down";
+    script = "/etc/nixos/sinet-infra/sinix/services/service-compose apps up";
+    postStop = "/etc/nixos/sinet-infra/sinix/services/service-compose apps down";
+
+    after = [ "stack-infra.service" "mnt-storage.mount" ];
+    requires = [ "docker.service" ];
+  };
+
 ##########
 # Telemetry
 ##########
